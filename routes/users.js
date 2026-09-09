@@ -71,6 +71,40 @@ route.post("/admin", [auth, mannager], async (req, res) => {
   }
 });
 
+route.delete("/", auth, async (req, res) => {
+  if (!req.body.password)
+    return res
+      .status(400)
+      .send({ success: false, message: "Provide your password!" });
+
+  try {
+    const user = await User.findById(req.user.id);
+
+    if (!user)
+      return res
+        .status(404)
+        .send({ success: false, message: "User not found!" });
+
+    const isPasswordMatch = await bcrypt.compare(
+      req.body.password,
+      user.password,
+    );
+
+    if (!isPasswordMatch)
+      return res
+        .status(401)
+        .send({ success: false, message: "Incorrect password!" });
+
+    await User.deleteOne({ _id: user._id });
+
+    res.send({ success: true, message: "Account deleted successfully." });
+  } catch (error) {
+    res
+      .status(500)
+      .send({ success: false, message: "Error occured: " + error });
+  }
+});
+
 route.patch("/promote", [auth, mannager], async (req, res) => {
   if (!req.body.email)
     return res
