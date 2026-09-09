@@ -1,8 +1,8 @@
 const express = require("express");
 const route = express.Router();
-const auth = require('../middleware/auth');
+const auth = require("../middleware/auth");
 const Cart = require("../models/cart");
-const { Product } = require("../models/product");
+//const { Product } = require("../models/product");
 
 route.post("/", auth, async (req, res) => {
   const { productID } = req.body;
@@ -15,20 +15,20 @@ route.post("/", auth, async (req, res) => {
   }
 
   try {
-    const product = await Product.findById(productID);
+    //const product = await Product.findById(productID);
 
-    if (!product) {
-      return res.status(404).send({
-        success: false,
-        message: "Product not found",
-      });
-    }
+    //if (!product) {
+    //  return res.status(404).send({
+    //    success: false,
+    //    message: "Product not found",
+    //  });
+    //}
 
     let cart = await Cart.findOne({ userId: req.user.id });
 
     if (!cart) {
       cart = new Cart({
-        userId: userID,
+        userId: req.user.id,
         items: [{ productId: productID, quantity: 1 }],
       });
 
@@ -56,6 +56,7 @@ route.post("/", auth, async (req, res) => {
     res.send({
       success: true,
       message: "Cart updated successfully",
+      data: cart,
     });
   } catch (error) {
     res
@@ -72,37 +73,7 @@ route.get("/", auth, async (req, res) => {
       return res.send({ success: true, data: [] });
     }
 
-    const cartItems = await Promise.all(
-      cart.items.map(async (item) => {
-        const product = await Product.findById(item.productId);
-
-        if (!product) {
-          return null;
-        }
-
-        const price =
-          product.discountPrice && product.discountPrice !== 0
-            ? product.discountPrice
-            : product.price;
-
-        const responseItem = {
-          _id: product._id,
-          title: product.title,
-          price: product.price,
-          quantity: item.quantity,
-          totalPrice: item.quantity * price,
-          imageURL: product.imageURL,
-        };
-
-        if (product.discountPrice && product.discountPrice !== 0) {
-          responseItem.discountPrice = product.discountPrice;
-        }
-
-        return responseItem;
-      }),
-    );
-
-    res.send({ success: true, data: cartItems.filter(Boolean) });
+    res.send({ success: true, data: cart });
   } catch (error) {
     res
       .status(500)
@@ -131,6 +102,52 @@ route.get("/count", auth, async (req, res) => {
   }
 });
 
+route.delete("/:productID", auth, async (req, res) => {
+  const { productID } = req.params;
+
+  if (!productID) {
+    return res.status(400).send({
+      success: false,
+      message: "ProductID is required",
+    });
+  }
+
+  try {
+    const cart = await Cart.findOne({ userId: req.user.id });
+
+    if (!cart) {
+      return res.status(404).send({
+        success: false,
+        message: "Cart not found",
+      });
+    }
+
+    const itemIndex = cart.items.findIndex(
+      (item) => item.productId.toString() === productID,
+    );
+
+    if (itemIndex === -1) {
+      return res.status(404).send({
+        success: false,
+        message: "Product not found in cart",
+      });
+    }
+
+    cart.items.splice(itemIndex, 1);
+    await cart.save();
+
+    return res.send({
+      success: true,
+      message: "Cart item removed successfully",
+      data: cart,
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .send({ success: false, message: "Error occured: " + error });
+  }
+});
+
 route.patch("/", auth, async (req, res) => {
   const { productID, updatedQuantity } = req.body;
 
@@ -138,6 +155,16 @@ route.patch("/", auth, async (req, res) => {
     return res.status(400).send({
       success: false,
       message: "ProductID is required",
+    });
+  }
+
+  if (
+    updatedQuantity !== undefined &&
+    (!Number.isInteger(updatedQuantity) || updatedQuantity < 1)
+  ) {
+    return res.status(400).send({
+      success: false,
+      message: "updatedQuantity must be an integer greater than zero",
     });
   }
 
