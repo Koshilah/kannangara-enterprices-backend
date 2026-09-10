@@ -1,0 +1,154 @@
+const express = require("express");
+const mongoose = require("mongoose");
+const route = express.Router();
+const auth = require("../middleware/auth");
+const admin = require("../middleware/admin");
+const { Delivery, DELIVERY_STATUSES } = require("../models/delivery");
+
+route.get("/", [auth, admin], async (req, res) => {
+  try {
+    const deliveries = await Delivery.find()
+      .populate("orderID")
+      .populate("userID", "name email")
+      .sort({ dueDate: 1, createdAt: -1 });
+
+    return res.send({ success: true, data: deliveries });
+  } catch (error) {
+    return res.status(500).send({
+      success: false,
+      message: "Error occurred while loading deliveries",
+    });
+  }
+});
+
+route.patch("/status", [auth, admin], async (req, res) => {
+  const { deliveryID, status } = req.body;
+
+  if (!deliveryID || !mongoose.Types.ObjectId.isValid(deliveryID)) {
+    return res.status(400).send({
+      success: false,
+      message: "A valid deliveryID is required",
+    });
+  }
+
+  if (!DELIVERY_STATUSES.includes(status)) {
+    return res.status(400).send({
+      success: false,
+      message: `status must be one of: ${DELIVERY_STATUSES.join(", ")}`,
+    });
+  }
+
+  try {
+    const delivery = await Delivery.findByIdAndUpdate(
+      deliveryID,
+      { status },
+      { new: true, runValidators: true },
+    );
+
+    if (!delivery) {
+      return res.status(404).send({
+        success: false,
+        message: "Delivery not found",
+      });
+    }
+
+    return res.send({
+      success: true,
+      message: "Delivery status updated successfully",
+      data: delivery,
+    });
+  } catch (error) {
+    return res.status(500).send({
+      success: false,
+      message: "Error occurred while updating delivery status",
+    });
+  }
+});
+
+route.patch("/due-date", [auth, admin], async (req, res) => {
+  const { deliveryID, dueDate } = req.body;
+
+  if (!deliveryID || !mongoose.Types.ObjectId.isValid(deliveryID)) {
+    return res.status(400).send({
+      success: false,
+      message: "A valid deliveryID is required",
+    });
+  }
+
+  if (!dueDate || Number.isNaN(Date.parse(dueDate))) {
+    return res.status(400).send({
+      success: false,
+      message: "dueDate must be a valid date",
+    });
+  }
+
+  try {
+    const delivery = await Delivery.findByIdAndUpdate(
+      deliveryID,
+      { dueDate: new Date(dueDate) },
+      { new: true, runValidators: true },
+    );
+
+    if (!delivery) {
+      return res.status(404).send({
+        success: false,
+        message: "Delivery not found",
+      });
+    }
+
+    return res.send({
+      success: true,
+      message: "Delivery due date updated successfully",
+      data: delivery,
+    });
+  } catch (error) {
+    return res.status(500).send({
+      success: false,
+      message: "Error occurred while updating delivery due date",
+    });
+  }
+});
+
+route.delete("/:deliveryId", [auth, admin], async (req, res) => {
+  const { deliveryId } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(deliveryId)) {
+    return res.status(400).send({
+      success: false,
+      message: "Invalid delivery document id",
+    });
+  }
+
+  try {
+    const delivery = await Delivery.findById(deliveryId);
+
+    if (!delivery) {
+      return res.status(404).send({
+        success: false,
+        message: "Delivery not found",
+      });
+    }
+
+    if (delivery.status !== "delivered") {
+      return res.status(409).send({
+        success: false,
+        message: "Only delivered deliveries can be deleted",
+      });
+    }
+
+    await delivery.deleteOne();
+
+    return res.send({
+      success: true,
+      message: "Delivery deleted successfully",
+      data: delivery,
+    });
+  } catch (error) {
+    return res.status(500).send({
+      success: false,
+      message: "Error occurred while deleting delivery",
+    });
+  }
+});
+
+module.exports = route;
