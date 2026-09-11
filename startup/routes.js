@@ -8,6 +8,7 @@ const expense = require("../routes/expense");
 const product = require("../routes/products");
 const order = require("../routes/orders");
 const delivery = require("../routes/delivery");
+const supplier = require("../routes/suppliers");
 
 module.exports = (app) => {
   app.use(
@@ -25,4 +26,5 @@ module.exports = (app) => {
   app.use("/api/product", product);
   app.use("/api/order", order);
   app.use("/api/delivery", delivery);
+  app.use("/api/supplier", supplier);
 };
