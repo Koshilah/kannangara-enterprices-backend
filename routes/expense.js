@@ -4,6 +4,7 @@ const route = express.Router();
 const auth = require("../middleware/auth");
 const admin = require("../middleware/admin");
 const Expense = require("../models/expense");
+const { EXPENSE_CATEGORIES } = require("../models/expense");
 
 route.get("/", [auth, admin], async (req, res) => {
   try {
@@ -22,7 +23,7 @@ route.get("/", [auth, admin], async (req, res) => {
 });
 
 route.post("/", [auth, admin], async (req, res) => {
-  const { amount, shortDescription, date } = req.body;
+  const { amount, shortDescription, category = "other", date } = req.body;
 
   if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0) {
     return res.status(400).send({
@@ -38,6 +39,13 @@ route.post("/", [auth, admin], async (req, res) => {
     });
   }
 
+  if (!EXPENSE_CATEGORIES.includes(category)) {
+    return res.status(400).send({
+      success: false,
+      message: "category is invalid",
+    });
+  }
+
   if (date !== undefined && Number.isNaN(Date.parse(date))) {
     return res.status(400).send({
       success: false,
@@ -49,6 +57,7 @@ route.post("/", [auth, admin], async (req, res) => {
     const expense = await Expense.create({
       amount,
       shortDescription,
+      category,
       date,
     });
 

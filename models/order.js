@@ -57,7 +57,12 @@ const orderSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
+      enum: ["pending", "paid", "failed", "refunded"],
+      default: "pending",
       trim: true,
+    },
+    paidAt: {
+      type: Date,
     },
     deliveryAddress: {
       type: String,
@@ -70,6 +75,8 @@ const orderSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+orderSchema.index({ paymentStatus: 1, dateOrdered: 1 });
 
 const Order = mongoose.model("Order", orderSchema);
 

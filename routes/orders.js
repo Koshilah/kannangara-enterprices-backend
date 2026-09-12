@@ -142,9 +142,14 @@ route.get("/:orderID", [auth, admin], async (req, res) => {
   }
 
   try {
-    const order = await Order.findById(orderID).populate("userID", "name email");
+    const order = await Order.findById(orderID).populate(
+      "userID",
+      "name email",
+    );
     if (!order) {
-      return res.status(404).send({ success: false, message: "Order not found" });
+      return res
+        .status(404)
+        .send({ success: false, message: "Order not found" });
     }
 
     const delivery = await Delivery.findOne({ orderID });
@@ -172,7 +177,9 @@ route.patch("/:orderID/cancel", [auth, admin], async (req, res) => {
   try {
     const order = await Order.findById(orderID);
     if (!order) {
-      return res.status(404).send({ success: false, message: "Order not found" });
+      return res
+        .status(404)
+        .send({ success: false, message: "Order not found" });
     }
 
     if (["cancelled", "delivered"].includes(order.orderStatus)) {
@@ -211,6 +218,49 @@ route.patch("/:orderID/cancel", [auth, admin], async (req, res) => {
     });
   } finally {
     await session?.endSession();
+  }
+});
+
+route.patch("/:orderID/payment", [auth, admin], async (req, res) => {
+  const { orderID } = req.params;
+  const { paymentStatus } = req.body;
+  const allowedStatuses = ["pending", "paid", "failed", "refunded"];
+
+  if (!isValidObjectId(orderID)) {
+    return res
+      .status(400)
+      .send({ success: false, message: "Invalid order id" });
+  }
+
+  if (!allowedStatuses.includes(paymentStatus)) {
+    return res.status(400).send({
+      success: false,
+      message: "paymentStatus must be pending, paid, failed, or refunded",
+    });
+  }
+
+  try {
+    const order = await Order.findById(orderID);
+    if (!order) {
+      return res
+        .status(404)
+        .send({ success: false, message: "Order not found" });
+    }
+
+    order.paymentStatus = paymentStatus;
+    order.paidAt = paymentStatus === "paid" ? new Date() : undefined;
+    await order.save();
+
+    return res.send({
+      success: true,
+      message: "Payment status updated successfully",
+      data: order,
+    });
+  } catch (error) {
+    return res.status(500).send({
+      success: false,
+      message: "Error occurred while updating payment status",
+    });
   }
 });
 

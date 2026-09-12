@@ -5,6 +5,7 @@ const user = require("../routes/users");
 const auth = require("../routes/auth");
 const cart = require("../routes/cart");
 const expense = require("../routes/expense");
+const finance = require("../routes/finance");
 const product = require("../routes/products");
 const order = require("../routes/orders");
 const delivery = require("../routes/delivery");
@@ -25,6 +26,7 @@ module.exports = (app) => {
   app.use("/api/auth", auth);
   app.use("/api/cart", cart);
   app.use("/api/expense", expense);
+  app.use("/api/finance", finance);
   app.use("/api/product", product);
   app.use("/api/order", order);
   app.use("/api/delivery", delivery);
