@@ -6,6 +6,29 @@ const { User, inputValidation } = require("../models/user");
 const auth = require("../middleware/auth");
 const mannager = require("../middleware/manager");
 
+const employeeFields = [
+  "_id",
+  "name",
+  "email",
+  "isAdmin",
+  "isMannager",
+  "isCashier",
+];
+
+const roleFlags = {
+  cashier: { isAdmin: false, isMannager: false, isCashier: true },
+  admin: { isAdmin: true, isMannager: false, isCashier: true },
+  manager: { isAdmin: true, isMannager: true, isCashier: true },
+};
+
+function getEmployee(user) {
+  return _.pick(user, employeeFields);
+}
+
+function getRoleFlags(role) {
+  return roleFlags[role];
+}
+
 route.post("/", async (req, res) => {
   const error = inputValidation(req.body);
   if (error)
@@ -68,6 +91,96 @@ route.post("/admin", [auth, mannager], async (req, res) => {
     res.send({ success: true, message: "Admin Created" });
   } catch (error) {
     res.status(500).send("Error occured: " + error);
+  }
+});
+
+route.get("/employees", [auth, mannager], async (req, res) => {
+  try {
+    const employees = await User.find({
+      $or: [{ isAdmin: true }, { isMannager: true }, { isCashier: true }],
+    })
+      .select(employeeFields.join(" "))
+      .sort({ name: 1 });
+
+    res.send({ success: true, data: employees });
+  } catch (error) {
+    res.status(500).send({ success: false, message: "Unable to load employees." });
+  }
+});
+
+route.post("/employees", [auth, mannager], async (req, res) => {
+  const error = inputValidation(_.pick(req.body, ["name", "email", "password"]));
+  if (error)
+    return res
+      .status(400)
+      .send({ success: false, message: error.details[0].message });
+
+  const flags = getRoleFlags(req.body.role);
+  if (!flags)
+    return res.status(400).send({ success: false, message: "Choose a valid employee role." });
+
+  try {
+    const existingUser = await User.findOne({ email: req.body.email });
+    if (existingUser)
+      return res
+        .status(400)
+        .send({ success: false, message: "User already registered!." });
+
+    const newUser = new User({
+      name: req.body.name,
+      email: req.body.email,
+      password: await bcrypt.hash(req.body.password, 10),
+      ...flags,
+    });
+
+    await newUser.save();
+    res.status(201).send({ success: true, data: getEmployee(newUser) });
+  } catch (error) {
+    res.status(500).send({ success: false, message: "Unable to create employee." });
+  }
+});
+
+route.patch("/employees/:id/role", [auth, mannager], async (req, res) => {
+  const flags = getRoleFlags(req.body.role);
+  if (!flags)
+    return res.status(400).send({ success: false, message: "Choose a valid employee role." });
+
+  if (req.params.id === req.user.id && !flags.isMannager)
+    return res.status(400).send({ success: false, message: "You cannot remove your own manager access." });
+
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: flags },
+      { new: true, runValidators: true },
+    );
+
+    if (!user)
+      return res.status(404).send({ success: false, message: "Employee not found." });
+
+    res.send({ success: true, data: getEmployee(user) });
+  } catch (error) {
+    res.status(500).send({ success: false, message: "Unable to update employee role." });
+  }
+});
+
+route.patch("/employees/:id/demote", [auth, mannager], async (req, res) => {
+  if (req.params.id === req.user.id)
+    return res.status(400).send({ success: false, message: "You cannot demote your own account." });
+
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: { isAdmin: false, isMannager: false, isCashier: false } },
+      { new: true },
+    );
+
+    if (!user)
+      return res.status(404).send({ success: false, message: "Employee not found." });
+
+    res.send({ success: true, data: getEmployee(user), message: "Employee changed to a normal user." });
+  } catch (error) {
+    res.status(500).send({ success: false, message: "Unable to remove employee access." });
   }
 });
 
