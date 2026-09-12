@@ -8,6 +8,10 @@ const Order = require("../models/order");
 const { Delivery } = require("../models/delivery");
 const { Product } = require("../models/product");
 
+function isValidObjectId(value) {
+  return mongoose.Types.ObjectId.isValid(value);
+}
+
 route.post("/", auth, async (req, res) => {
   const { cartID, paymentMethod, deliveryAddress } = req.body;
 
@@ -107,6 +111,104 @@ route.post("/", auth, async (req, res) => {
     res
       .status(500)
       .send({ success: false, message: "Error occured: " + error });
+  } finally {
+    await session?.endSession();
+  }
+});
+
+route.get("/", [auth, admin], async (req, res) => {
+  try {
+    const orders = await Order.find()
+      .populate("userID", "name email")
+      .sort({ dateOrdered: -1, createdAt: -1 });
+
+    return res.send({ success: true, data: orders });
+  } catch (error) {
+    return res.status(500).send({
+      success: false,
+      message: "Error occurred while loading orders",
+    });
+  }
+});
+
+route.get("/:orderID", [auth, admin], async (req, res) => {
+  const { orderID } = req.params;
+
+  if (!isValidObjectId(orderID)) {
+    return res.status(400).send({
+      success: false,
+      message: "Invalid order id",
+    });
+  }
+
+  try {
+    const order = await Order.findById(orderID).populate("userID", "name email");
+    if (!order) {
+      return res.status(404).send({ success: false, message: "Order not found" });
+    }
+
+    const delivery = await Delivery.findOne({ orderID });
+    return res.send({ success: true, data: { order, delivery } });
+  } catch (error) {
+    return res.status(500).send({
+      success: false,
+      message: "Error occurred while loading order details",
+    });
+  }
+});
+
+route.patch("/:orderID/cancel", [auth, admin], async (req, res) => {
+  const { orderID } = req.params;
+
+  if (!isValidObjectId(orderID)) {
+    return res.status(400).send({
+      success: false,
+      message: "Invalid order id",
+    });
+  }
+
+  let session;
+
+  try {
+    const order = await Order.findById(orderID);
+    if (!order) {
+      return res.status(404).send({ success: false, message: "Order not found" });
+    }
+
+    if (["cancelled", "delivered"].includes(order.orderStatus)) {
+      return res.status(409).send({
+        success: false,
+        message: `A ${order.orderStatus} order cannot be cancelled`,
+      });
+    }
+
+    session = await mongoose.startSession();
+    session.startTransaction();
+
+    order.orderStatus = "cancelled";
+    await order.save({ session });
+
+    const delivery = await Delivery.findOneAndUpdate(
+      { orderID },
+      { status: "cancelled" },
+      { new: true, session, runValidators: true },
+    );
+
+    await session.commitTransaction();
+    return res.send({
+      success: true,
+      message: "Order cancelled successfully",
+      data: { order, delivery },
+    });
+  } catch (error) {
+    if (session?.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    return res.status(500).send({
+      success: false,
+      message: "Error occurred while cancelling order",
+    });
   } finally {
     await session?.endSession();
   }

@@ -5,6 +5,7 @@ const DELIVERY_STATUSES = [
   "processing",
   "out_for_delivery",
   "delivered",
+  "cancelled",
 ];
 
 const deliverySchema = new mongoose.Schema(
