@@ -4,6 +4,8 @@ const { Product, inputValidation } = require("../models/product");
 const { User } = require("../models/user");
 const auth = require("../middleware/auth");
 const admin = require("../middleware/admin");
+const inventory = require("../middleware/inventory");
+const catalog = require("../middleware/catalog");
 
 route.get("/", async (req, res) => {
   try {
@@ -57,7 +59,34 @@ route.get("/:id", async (req, res) => {
   }
 });
 
-route.put("/:id", [auth, admin], async (req, res) => {
+route.patch("/:id/stock", [auth, inventory], async (req, res) => {
+  const quantity = Number(req.body.totalStock);
+
+  if (!Number.isInteger(quantity) || quantity < 0) {
+    return res.status(400).send({
+      success: false,
+      message: "Quantity must be a non-negative whole number",
+    });
+  }
+
+  try {
+    const product = await Product.findByIdAndUpdate(
+      req.params.id,
+      { totalStock: quantity, outOfStock: quantity === 0 },
+      { new: true, runValidators: true },
+    );
+
+    if (!product) {
+      return res.status(404).send({ success: false, message: "Product not found" });
+    }
+
+    return res.send({ success: true, data: product });
+  } catch (error) {
+    return res.status(500).send({ success: false, message: "Error occurred while updating stock" });
+  }
+});
+
+route.put("/:id", [auth, catalog], async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
 
@@ -67,15 +96,9 @@ route.put("/:id", [auth, admin], async (req, res) => {
         message: "Product not found",
       });
 
-    product.title = req.body.title || product.title;
-    product.description = req.body.description || product.description;
-    product.category = req.body.category || product.category;
-    product.price = req.body.price || product.price;
-    product.discountPrice = req.body.discountPrice || product.discountPrice;
-    product.imageURL = req.body.imageURL || product.imageURL;
-    product.totalStock = req.body.totalStock || product.totalStock;
-    product.outOfStock = req.body.outOfStock || product.outOfStock;
-    product.visibility = req.body.visibility || product.visibility;
+    ["title", "description", "category", "price", "discountPrice", "imageURL", "totalStock", "outOfStock", "visibility"].forEach((field) => {
+      if (req.body[field] !== undefined) product[field] = req.body[field];
+    });
 
     await product.save();
 
@@ -91,7 +114,7 @@ route.put("/:id", [auth, admin], async (req, res) => {
   }
 });
 
-route.delete("/:id", [auth, admin], async (req, res) => {
+route.delete("/:id", [auth, catalog], async (req, res) => {
   try {
     const product = await Product.findByIdAndDelete(req.params.id);
 
@@ -110,7 +133,7 @@ route.delete("/:id", [auth, admin], async (req, res) => {
   }
 });
 
-route.post("/", [auth, admin], async (req, res) => {
+route.post("/", [auth, catalog], async (req, res) => {
   const validationError = inputValidation(req.body);
 
   if (validationError)

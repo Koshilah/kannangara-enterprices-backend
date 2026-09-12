@@ -9,6 +9,8 @@ const product = require("../routes/products");
 const order = require("../routes/orders");
 const delivery = require("../routes/delivery");
 const supplier = require("../routes/suppliers");
+const category = require("../routes/categories");
+const cloudinary = require("../routes/cloudinary");
 
 module.exports = (app) => {
   app.use(
@@ -27,4 +29,6 @@ module.exports = (app) => {
   app.use("/api/order", order);
   app.use("/api/delivery", delivery);
   app.use("/api/supplier", supplier);
+  app.use("/api/category", category);
+  app.use("/api/cloudinary", cloudinary);
 };
