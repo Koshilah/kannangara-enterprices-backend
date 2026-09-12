@@ -6,7 +6,7 @@ module.exports = () => {
     .then(() => {
       console.log("Connected to mongoDB!");
     })
-    .catch(() => {
+    .catch((err) => {
       console.error("Error connecting to mongoDB!");
     });
 };
