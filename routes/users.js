@@ -2,6 +2,7 @@ const express = require("express");
 const route = express.Router();
 const _ = require("lodash");
 const bcrypt = require("bcrypt");
+const Joi = require("joi");
 const { User, inputValidation } = require("../models/user");
 const auth = require("../middleware/auth");
 const mannager = require("../middleware/manager");
@@ -20,6 +21,10 @@ const roleFlags = {
   admin: { isAdmin: true, isMannager: false, isCashier: true },
   manager: { isAdmin: true, isMannager: true, isCashier: true },
 };
+
+const passwordSchema = Joi.string()
+  .pattern(new RegExp(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/))
+  .required();
 
 function getEmployee(user) {
   return _.pick(user, employeeFields);
@@ -104,12 +109,106 @@ route.get("/employees", [auth, mannager], async (req, res) => {
 
     res.send({ success: true, data: employees });
   } catch (error) {
-    res.status(500).send({ success: false, message: "Unable to load employees." });
+    res
+      .status(500)
+      .send({ success: false, message: "Unable to load employees." });
+  }
+});
+
+route.get("/profile", auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id || req.user.id).select(
+      "name email",
+    );
+    if (!user)
+      return res
+        .status(404)
+        .send({ success: false, message: "User not found." });
+    res.send({ success: true, data: _.pick(user, ["name", "email"]) });
+  } catch (error) {
+    res
+      .status(500)
+      .send({ success: false, message: "Unable to load profile." });
+  }
+});
+
+route.patch("/profile", auth, async (req, res) => {
+  const { name, email } = req.body;
+  const emailError = Joi.string().email().min(6).max(50).validate(email).error;
+
+  if (!name || name.trim().length < 2 || name.trim().length > 40)
+    return res
+      .status(400)
+      .send({
+        success: false,
+        message: "Name must be between 2 and 40 characters.",
+      });
+  if (!email || emailError)
+    return res
+      .status(400)
+      .send({ success: false, message: "Provide a valid email address." });
+
+  try {
+    const userID = req.user._id || req.user.id;
+    const existingUser = await User.findOne({ email, _id: { $ne: userID } });
+    if (existingUser)
+      return res
+        .status(400)
+        .send({ success: false, message: "Email is already in use." });
+
+    const user = await User.findByIdAndUpdate(
+      userID,
+      { $set: { name: name.trim(), email: email.trim() } },
+      { new: true, runValidators: true },
+    ).select("name email");
+    if (!user)
+      return res
+        .status(404)
+        .send({ success: false, message: "User not found." });
+    res.send({ success: true, data: _.pick(user, ["name", "email"]) });
+  } catch (error) {
+    res
+      .status(500)
+      .send({ success: false, message: "Unable to update profile." });
+  }
+});
+
+route.patch("/profile/password", auth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  const passwordError = passwordSchema.validate(newPassword).error;
+  if (!currentPassword || passwordError)
+    return res
+      .status(400)
+      .send({
+        success: false,
+        message:
+          "Use a valid password with at least 8 characters, including uppercase, lowercase, number, and symbol.",
+      });
+
+  try {
+    const user = await User.findById(req.user._id || req.user.id);
+    if (!user)
+      return res
+        .status(404)
+        .send({ success: false, message: "User not found." });
+    if (!(await bcrypt.compare(currentPassword, user.password)))
+      return res
+        .status(401)
+        .send({ success: false, message: "Current password is incorrect." });
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+    res.send({ success: true, message: "Password updated successfully." });
+  } catch (error) {
+    res
+      .status(500)
+      .send({ success: false, message: "Unable to update password." });
   }
 });
 
 route.post("/employees", [auth, mannager], async (req, res) => {
-  const error = inputValidation(_.pick(req.body, ["name", "email", "password"]));
+  const error = inputValidation(
+    _.pick(req.body, ["name", "email", "password"]),
+  );
   if (error)
     return res
       .status(400)
@@ -117,7 +216,9 @@ route.post("/employees", [auth, mannager], async (req, res) => {
 
   const flags = getRoleFlags(req.body.role);
   if (!flags)
-    return res.status(400).send({ success: false, message: "Choose a valid employee role." });
+    return res
+      .status(400)
+      .send({ success: false, message: "Choose a valid employee role." });
 
   try {
     const existingUser = await User.findOne({ email: req.body.email });
@@ -136,17 +237,26 @@ route.post("/employees", [auth, mannager], async (req, res) => {
     await newUser.save();
     res.status(201).send({ success: true, data: getEmployee(newUser) });
   } catch (error) {
-    res.status(500).send({ success: false, message: "Unable to create employee." });
+    res
+      .status(500)
+      .send({ success: false, message: "Unable to create employee." });
   }
 });
 
 route.patch("/employees/:id/role", [auth, mannager], async (req, res) => {
   const flags = getRoleFlags(req.body.role);
   if (!flags)
-    return res.status(400).send({ success: false, message: "Choose a valid employee role." });
+    return res
+      .status(400)
+      .send({ success: false, message: "Choose a valid employee role." });
 
   if (req.params.id === req.user.id && !flags.isMannager)
-    return res.status(400).send({ success: false, message: "You cannot remove your own manager access." });
+    return res
+      .status(400)
+      .send({
+        success: false,
+        message: "You cannot remove your own manager access.",
+      });
 
   try {
     const user = await User.findByIdAndUpdate(
@@ -156,17 +266,23 @@ route.patch("/employees/:id/role", [auth, mannager], async (req, res) => {
     );
 
     if (!user)
-      return res.status(404).send({ success: false, message: "Employee not found." });
+      return res
+        .status(404)
+        .send({ success: false, message: "Employee not found." });
 
     res.send({ success: true, data: getEmployee(user) });
   } catch (error) {
-    res.status(500).send({ success: false, message: "Unable to update employee role." });
+    res
+      .status(500)
+      .send({ success: false, message: "Unable to update employee role." });
   }
 });
 
 route.patch("/employees/:id/demote", [auth, mannager], async (req, res) => {
   if (req.params.id === req.user.id)
-    return res.status(400).send({ success: false, message: "You cannot demote your own account." });
+    return res
+      .status(400)
+      .send({ success: false, message: "You cannot demote your own account." });
 
   try {
     const user = await User.findByIdAndUpdate(
@@ -176,11 +292,19 @@ route.patch("/employees/:id/demote", [auth, mannager], async (req, res) => {
     );
 
     if (!user)
-      return res.status(404).send({ success: false, message: "Employee not found." });
+      return res
+        .status(404)
+        .send({ success: false, message: "Employee not found." });
 
-    res.send({ success: true, data: getEmployee(user), message: "Employee changed to a normal user." });
+    res.send({
+      success: true,
+      data: getEmployee(user),
+      message: "Employee changed to a normal user.",
+    });
   } catch (error) {
-    res.status(500).send({ success: false, message: "Unable to remove employee access." });
+    res
+      .status(500)
+      .send({ success: false, message: "Unable to remove employee access." });
   }
 });
 
