@@ -18,6 +18,7 @@ function signAccessToken(user) {
     id: user._id.toString(),
     name: user.name,
     email: user.email,
+    phone: user.phone || "",
     isAdmin: user.isAdmin,
     isMannager: user.isMannager,
     isCashier: user.isCashier,

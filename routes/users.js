@@ -4,6 +4,7 @@ const _ = require("lodash");
 const bcrypt = require("bcrypt");
 const Joi = require("joi");
 const { User, inputValidation } = require("../models/user");
+const { signAccessToken } = require("../utils/tokens");
 const auth = require("../middleware/auth");
 const mannager = require("../middleware/manager");
 
@@ -11,6 +12,7 @@ const employeeFields = [
   "_id",
   "name",
   "email",
+  "phone",
   "isAdmin",
   "isMannager",
   "isCashier",
@@ -49,7 +51,14 @@ route.post("/", async (req, res) => {
 
   try {
     const newUser = new User(
-      _.pick(req.body, ["name", "email", "password", "isAdmin", "isMannager"]),
+      _.pick(req.body, [
+        "name",
+        "email",
+        "phone",
+        "password",
+        "isAdmin",
+        "isMannager",
+      ]),
     );
 
     const salt = await bcrypt.genSaltSync(10);
@@ -58,7 +67,7 @@ route.post("/", async (req, res) => {
     newUser.password = hash;
 
     await newUser.save();
-    const token = newUser.generateJWT();
+    const token = signAccessToken(newUser);
 
     res
       .header("x-auth-token", token)
@@ -118,13 +127,20 @@ route.get("/employees", [auth, mannager], async (req, res) => {
 route.get("/profile", auth, async (req, res) => {
   try {
     const user = await User.findById(req.user._id || req.user.id).select(
-      "name email",
+      "name email phone",
     );
     if (!user)
       return res
         .status(404)
         .send({ success: false, message: "User not found." });
-    res.send({ success: true, data: _.pick(user, ["name", "email"]) });
+    res.send({
+      success: true,
+      data: {
+        name: user.name || "",
+        email: user.email || "",
+        phone: user.phone || "",
+      },
+    });
   } catch (error) {
     res
       .status(500)
@@ -133,20 +149,28 @@ route.get("/profile", auth, async (req, res) => {
 });
 
 route.patch("/profile", auth, async (req, res) => {
-  const { name, email } = req.body;
+  const name = req.body.name || req.body.fullName;
+  const { email, phone } = req.body;
   const emailError = Joi.string().email().min(6).max(50).validate(email).error;
 
   if (!name || name.trim().length < 2 || name.trim().length > 40)
-    return res
-      .status(400)
-      .send({
-        success: false,
-        message: "Name must be between 2 and 40 characters.",
-      });
+    return res.status(400).send({
+      success: false,
+      message: "Name must be between 2 and 40 characters.",
+    });
   if (!email || emailError)
     return res
       .status(400)
       .send({ success: false, message: "Provide a valid email address." });
+
+  if (phone !== undefined && phone !== null && phone.trim().length > 25) {
+    return res
+      .status(400)
+      .send({
+        success: false,
+        message: "Phone number cannot exceed 25 characters.",
+      });
+  }
 
   try {
     const userID = req.user._id || req.user.id;
@@ -156,16 +180,31 @@ route.patch("/profile", auth, async (req, res) => {
         .status(400)
         .send({ success: false, message: "Email is already in use." });
 
+    const updateFields = {
+      name: name.trim(),
+      email: email.trim(),
+    };
+    if (phone !== undefined && phone !== null) {
+      updateFields.phone = phone.trim();
+    }
+
     const user = await User.findByIdAndUpdate(
       userID,
-      { $set: { name: name.trim(), email: email.trim() } },
+      { $set: updateFields },
       { new: true, runValidators: true },
-    ).select("name email");
+    ).select("name email phone");
     if (!user)
       return res
         .status(404)
         .send({ success: false, message: "User not found." });
-    res.send({ success: true, data: _.pick(user, ["name", "email"]) });
+    res.send({
+      success: true,
+      data: {
+        name: user.name || "",
+        email: user.email || "",
+        phone: user.phone || "",
+      },
+    });
   } catch (error) {
     res
       .status(500)
@@ -177,13 +216,11 @@ route.patch("/profile/password", auth, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   const passwordError = passwordSchema.validate(newPassword).error;
   if (!currentPassword || passwordError)
-    return res
-      .status(400)
-      .send({
-        success: false,
-        message:
-          "Use a valid password with at least 8 characters, including uppercase, lowercase, number, and symbol.",
-      });
+    return res.status(400).send({
+      success: false,
+      message:
+        "Use a valid password with at least 8 characters, including uppercase, lowercase, number, and symbol.",
+    });
 
   try {
     const user = await User.findById(req.user._id || req.user.id);
@@ -207,7 +244,7 @@ route.patch("/profile/password", auth, async (req, res) => {
 
 route.post("/employees", [auth, mannager], async (req, res) => {
   const error = inputValidation(
-    _.pick(req.body, ["name", "email", "password"]),
+    _.pick(req.body, ["name", "email", "phone", "password"]),
   );
   if (error)
     return res
@@ -230,6 +267,7 @@ route.post("/employees", [auth, mannager], async (req, res) => {
     const newUser = new User({
       name: req.body.name,
       email: req.body.email,
+      phone: req.body.phone || "",
       password: await bcrypt.hash(req.body.password, 10),
       ...flags,
     });
@@ -251,12 +289,10 @@ route.patch("/employees/:id/role", [auth, mannager], async (req, res) => {
       .send({ success: false, message: "Choose a valid employee role." });
 
   if (req.params.id === req.user.id && !flags.isMannager)
-    return res
-      .status(400)
-      .send({
-        success: false,
-        message: "You cannot remove your own manager access.",
-      });
+    return res.status(400).send({
+      success: false,
+      message: "You cannot remove your own manager access.",
+    });
 
   try {
     const user = await User.findByIdAndUpdate(

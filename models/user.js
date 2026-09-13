@@ -18,6 +18,11 @@ const userSchema = new mongoose.Schema(
       maxLength: 50,
       required: true,
     },
+    phone: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     password: {
       type: String,
       required: true,
@@ -40,7 +45,12 @@ const userSchema = new mongoose.Schema(
 
 userSchema.methods.generateJWT = function () {
   const token = jwt.sign(
-    { _id: this.id, isAdmin: this.isAdmin, isMannager: this.isMannager, isCashier: this.isCashier },
+    {
+      _id: this.id,
+      isAdmin: this.isAdmin,
+      isMannager: this.isMannager,
+      isCashier: this.isCashier,
+    },
     process.env.JWT_PRIVATE_KEY,
     { expiresIn: "15m" },
   );
@@ -51,6 +61,7 @@ const inputValidation = (req) => {
   const schema = Joi.object({
     name: Joi.string().min(2).max(40).required(),
     email: Joi.string().email().min(6).max(50).required(),
+    phone: Joi.string().allow("").optional(),
     password: Joi.string()
       .pattern(new RegExp(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/))
       .required(),
