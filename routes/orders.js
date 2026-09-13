@@ -181,8 +181,23 @@ route.get("/my-orders", auth, async (req, res) => {
       dateOrdered: -1,
       createdAt: -1,
     });
+    const orderIDs = orders.map((order) => order._id);
+    const deliveries = await Delivery.find({ orderID: { $in: orderIDs } });
+    const deliveryByOrderID = new Map(
+      deliveries.map((delivery) => [
+        delivery.orderID.toString(),
+        delivery.status,
+      ]),
+    );
+    const ordersWithDeliveryStatus = orders.map((order) => {
+      const orderData = order.toObject();
+      orderData.deliveryStatus =
+        deliveryByOrderID.get(order._id.toString()) ||
+        (order.orderStatus === "cancelled" ? "cancelled" : "pending");
+      return orderData;
+    });
 
-    return res.send({ success: true, data: orders });
+    return res.send({ success: true, data: ordersWithDeliveryStatus });
   } catch (error) {
     return res.status(500).send({
       success: false,
@@ -237,7 +252,7 @@ route.get("/:orderID", [auth, admin], async (req, res) => {
   }
 });
 
-route.patch("/:orderID/cancel", [auth, admin], async (req, res) => {
+route.patch("/:orderID/cancel", auth, async (req, res) => {
   const { orderID } = req.params;
 
   if (!isValidObjectId(orderID)) {
@@ -255,6 +270,15 @@ route.patch("/:orderID/cancel", [auth, admin], async (req, res) => {
       return res
         .status(404)
         .send({ success: false, message: "Order not found" });
+    }
+
+    const isAdmin = Boolean(req.user.isAdmin);
+    const isOwner = order.userID.toString() === req.user.id;
+    if (!isAdmin && !isOwner) {
+      return res.status(403).send({
+        success: false,
+        message: "You can only cancel your own orders",
+      });
     }
 
     if (["cancelled", "delivered"].includes(order.orderStatus)) {
