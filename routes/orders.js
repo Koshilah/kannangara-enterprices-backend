@@ -13,19 +13,43 @@ function isValidObjectId(value) {
 }
 
 route.post("/", auth, async (req, res) => {
-  const { cartID, paymentMethod, deliveryAddress } = req.body;
+  const {
+    cartID,
+    paymentMethod,
+    deliveryAddress,
+    orderType = "delivery",
+  } = req.body;
 
-  if (!cartID || !paymentMethod || !deliveryAddress) {
+  if (!paymentMethod) {
     return res.status(400).send({
       success: false,
-      message: "cartID, paymentMethod and deliveryAddress are required",
+      message: "paymentMethod is required",
     });
   }
+
+  if (orderType === "delivery" && !deliveryAddress) {
+    return res.status(400).send({
+      success: false,
+      message: "deliveryAddress is required for delivery orders",
+    });
+  }
+
+  const finalDeliveryAddress =
+    orderType === "pickup"
+      ? deliveryAddress || "Store Pickup (Kannangara Enterprises)"
+      : deliveryAddress;
 
   let session;
 
   try {
-    const cart = await Cart.findOne({ _id: cartID, userId: req.user.id });
+    let cart = null;
+    if (cartID && isValidObjectId(cartID)) {
+      cart = await Cart.findOne({ _id: cartID, userId: req.user.id });
+    }
+
+    if (!cart) {
+      cart = await Cart.findOne({ userId: req.user.id });
+    }
 
     if (!cart) {
       return res.status(404).send({
@@ -45,39 +69,67 @@ route.post("/", auth, async (req, res) => {
     let orderTotal = 0;
 
     for (const item of cart.items) {
-      const product = await Product.findById(item.productId);
-
-      if (!product) {
-        continue;
+      let product = null;
+      if (isValidObjectId(item.productId)) {
+        product = await Product.findById(item.productId);
       }
 
-      const price =
-        product.discountPrice && product.discountPrice !== 0
-          ? product.discountPrice
-          : product.price;
+      let price = 0;
+      let title = "Product";
+      let imageURL = "";
 
-      const priceTotal = price * item.quantity;
+      if (product) {
+        price =
+          product.discountPrice && product.discountPrice !== 0
+            ? product.discountPrice
+            : product.price;
+        title = product.title;
+        imageURL = product.imageURL;
+      } else {
+        price = Number(item.discountPrice || item.price || 0);
+        title = item.title || "Product";
+        imageURL = item.imageURL || "";
+      }
+
+      const quantity = Number(item.quantity) || 1;
+      const priceTotal = price * quantity;
 
       orderTotal += priceTotal;
 
+      const productID = product
+        ? product._id
+        : isValidObjectId(item.productId)
+          ? item.productId
+          : new mongoose.Types.ObjectId();
+
       orderItems.push({
-        productID: product._id,
-        title: product.title,
+        productID,
+        title,
         priceSingle: price,
-        quantity: item.quantity,
-        imageURL: product.imageURL,
+        quantity,
+        imageURL,
         priceTotal,
       });
     }
+
+    const isOnlinePayment = !paymentMethod?.toLowerCase().includes("cash");
+    const paymentStatus = isOnlinePayment ? "successful" : "pending";
+    const paymentID = isOnlinePayment
+      ? "PAY-" +
+        new mongoose.Types.ObjectId().toString().slice(-8).toUpperCase()
+      : "";
 
     const order = new Order({
       userID: req.user.id,
       items: orderItems,
       orderTotal,
+      orderType,
       paymentMethod,
-      paymentStatus: "pending",
-      deliveryAddress,
-      paymentID: "",
+      paymentStatus,
+      orderStatus: "successful",
+      paidAt: isOnlinePayment ? new Date() : undefined,
+      deliveryAddress: finalDeliveryAddress,
+      paymentID,
     });
 
     session = await mongoose.startSession();
@@ -85,17 +137,24 @@ route.post("/", auth, async (req, res) => {
 
     await order.save({ session });
 
-    const dueDate = new Date(order.dateOrdered);
-    dueDate.setDate(dueDate.getDate() + 3);
+    if (orderType === "delivery") {
+      const dueDate = new Date(order.dateOrdered);
+      dueDate.setDate(dueDate.getDate() + 3);
 
-    const delivery = new Delivery({
-      orderID: order._id,
-      userID: req.user.id,
-      deliveryAddress,
-      dueDate,
-    });
+      const delivery = new Delivery({
+        orderID: order._id,
+        userID: req.user.id,
+        deliveryAddress: finalDeliveryAddress,
+        dueDate,
+      });
 
-    await delivery.save({ session });
+      await delivery.save({ session });
+    }
+
+    // Empty the user's cart upon order placement
+    cart.items = [];
+    await cart.save({ session });
+
     await session.commitTransaction();
 
     res.status(201).send({
@@ -113,6 +172,22 @@ route.post("/", auth, async (req, res) => {
       .send({ success: false, message: "Error occured: " + error });
   } finally {
     await session?.endSession();
+  }
+});
+
+route.get("/my-orders", auth, async (req, res) => {
+  try {
+    const orders = await Order.find({ userID: req.user.id }).sort({
+      dateOrdered: -1,
+      createdAt: -1,
+    });
+
+    return res.send({ success: true, data: orders });
+  } catch (error) {
+    return res.status(500).send({
+      success: false,
+      message: "Error occurred while loading customer orders",
+    });
   }
 });
 
