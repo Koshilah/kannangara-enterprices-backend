@@ -66,6 +66,7 @@ route.get("/summary", [auth, management], async (req, res) => {
             dateOrdered: { $gte: firstMonth },
             orderStatus: { $ne: "cancelled" },
             paymentStatus: "paid",
+            paymentStatus: { $in: ["paid", "successful"] },
           },
         },
         {
