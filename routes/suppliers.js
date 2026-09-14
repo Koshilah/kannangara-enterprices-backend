@@ -60,6 +60,7 @@ function sendValidationError(res, error) {
   });
 }
 
+//get all
 route.get("/", [auth, admin], async (req, res) => {
   try {
     const suppliers = await Supplier.find()
@@ -74,6 +75,7 @@ route.get("/", [auth, admin], async (req, res) => {
     });
   }
 });
+
 
 route.get("/by-product/:productId", [auth, admin], async (req, res) => {
   const { productId } = req.params;
