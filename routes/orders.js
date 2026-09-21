@@ -66,7 +66,8 @@ route.post("/", auth, async (req, res) => {
     }
 
     const orderItems = [];
-    let orderTotal = 0;
+    let subtotal = 0;
+    let totalSavings = 0;
 
     for (const item of cart.items) {
       let product = null;
@@ -75,10 +76,12 @@ route.post("/", auth, async (req, res) => {
       }
 
       let price = 0;
+      let originalPrice = 0;
       let title = "Product";
       let imageURL = "";
 
       if (product) {
+        originalPrice = Number(product.price || 0);
         price =
           product.discountPrice && product.discountPrice !== 0
             ? product.discountPrice
@@ -87,14 +90,17 @@ route.post("/", auth, async (req, res) => {
         imageURL = product.imageURL;
       } else {
         price = Number(item.discountPrice || item.price || 0);
+        originalPrice = Number(item.price || price);
         title = item.title || "Product";
         imageURL = item.imageURL || "";
       }
 
       const quantity = Number(item.quantity) || 1;
       const priceTotal = price * quantity;
+      const savingsTotal = Math.max(0, originalPrice - price) * quantity;
 
-      orderTotal += priceTotal;
+      subtotal += priceTotal;
+      totalSavings += savingsTotal;
 
       const productID = product
         ? product._id
@@ -106,11 +112,20 @@ route.post("/", auth, async (req, res) => {
         productID,
         title,
         priceSingle: price,
+        originalPriceSingle: originalPrice,
         quantity,
         imageURL,
         priceTotal,
+        savingsTotal,
       });
     }
+
+    const deliveryFee = 0;
+    const orderTotal = subtotal + deliveryFee;
+    const estimatedDeliveryDate =
+      orderType === "delivery"
+        ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+        : undefined;
 
     const isOnlinePayment = !paymentMethod?.toLowerCase().includes("cash");
     const paymentStatus = isOnlinePayment ? "successful" : "pending";
@@ -122,6 +137,9 @@ route.post("/", auth, async (req, res) => {
     const order = new Order({
       userID: req.user.id,
       items: orderItems,
+      subtotal,
+      totalSavings,
+      deliveryFee,
       orderTotal,
       orderType,
       paymentMethod,
@@ -129,6 +147,7 @@ route.post("/", auth, async (req, res) => {
       orderStatus: "successful",
       paidAt: isOnlinePayment ? new Date() : undefined,
       deliveryAddress: finalDeliveryAddress,
+      estimatedDeliveryDate,
       paymentID,
     });
 
@@ -138,14 +157,11 @@ route.post("/", auth, async (req, res) => {
     await order.save({ session });
 
     if (orderType === "delivery") {
-      const dueDate = new Date(order.dateOrdered);
-      dueDate.setDate(dueDate.getDate() + 3);
-
       const delivery = new Delivery({
         orderID: order._id,
         userID: req.user.id,
         deliveryAddress: finalDeliveryAddress,
-        dueDate,
+        dueDate: estimatedDeliveryDate,
       });
 
       await delivery.save({ session });

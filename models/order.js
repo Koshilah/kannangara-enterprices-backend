@@ -23,6 +23,10 @@ const orderSchema = new mongoose.Schema(
           type: Number,
           required: true,
         },
+        originalPriceSingle: {
+          type: Number,
+          default: 0,
+        },
         quantity: {
           type: Number,
           required: true,
@@ -36,8 +40,24 @@ const orderSchema = new mongoose.Schema(
           type: Number,
           required: true,
         },
+        savingsTotal: {
+          type: Number,
+          default: 0,
+        },
       },
     ],
+    subtotal: {
+      type: Number,
+      default: 0,
+    },
+    totalSavings: {
+      type: Number,
+      default: 0,
+    },
+    deliveryFee: {
+      type: Number,
+      default: 0,
+    },
     orderTotal: {
       type: Number,
       required: true,
@@ -79,6 +99,9 @@ const orderSchema = new mongoose.Schema(
     deliveryAddress: {
       type: String,
       trim: true,
+    },
+    estimatedDeliveryDate: {
+      type: Date,
     },
     paymentID: {
       type: String,
