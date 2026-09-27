@@ -9,7 +9,8 @@
     "test:users": "jest tests/users.test.js --runInBand",
     "test:auth": "jest tests/auth.test.js --runInBand",
     "test:suppliers": "jest tests/suppliers.test.js --runInBand",
-    "test:products": "jest tests/products.test.js --runInBand"
+    "test:products": "jest tests/products.test.js --runInBand",
+    "test:orders": "jest tests/orders.test.js --runInBand"
   },
   "keywords": [],
   "author": "",
