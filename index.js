@@ -1,17 +1,16 @@
-const express = require('express');
-const app = express();
-
-require('dotenv').config();
-
-app.get('/', (req,res) => {
-    res.send("Hello World!...");
-})
+require("dotenv").config();
+const app = require("./app");
+const connectDatabase = require("./startup/db");
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-    console.log("Server running on port",PORT);
-})
-
-require('./startup/db')();
-require('./startup/routes')(app);
+connectDatabase()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log("Server running on port", PORT);
+    });
+  })
+  .catch((error) => {
+    console.error("Error connecting to mongoDB!", error);
+    process.exitCode = 1;
+  });

@@ -51,14 +51,7 @@ route.post("/", async (req, res) => {
 
   try {
     const newUser = new User(
-      _.pick(req.body, [
-        "name",
-        "email",
-        "phone",
-        "password",
-        "isAdmin",
-        "isMannager",
-      ]),
+      _.pick(req.body, ["name", "email", "phone", "password"]),
     );
 
     const salt = await bcrypt.genSaltSync(10);
@@ -164,12 +157,10 @@ route.patch("/profile", auth, async (req, res) => {
       .send({ success: false, message: "Provide a valid email address." });
 
   if (phone !== undefined && phone !== null && phone.trim().length > 25) {
-    return res
-      .status(400)
-      .send({
-        success: false,
-        message: "Phone number cannot exceed 25 characters.",
-      });
+    return res.status(400).send({
+      success: false,
+      message: "Phone number cannot exceed 25 characters.",
+    });
   }
 
   try {
@@ -407,13 +398,13 @@ route.patch("/promote", [auth, mannager], async (req, res) => {
 });
 
 route.get("/", [auth, mannager], async (req, res) => {
-  if (!req.body.email)
+  if (!req.query.email)
     return res
       .status(400)
       .send({ success: false, message: "Provide a valid Email!" });
 
   try {
-    const user = await User.findOne({ email: req.body.email });
+    const user = await User.findOne({ email: req.query.email });
     if (!user)
       return res
         .status(404)
