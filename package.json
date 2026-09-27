@@ -12,7 +12,8 @@
     "test:products": "jest tests/products.test.js --runInBand",
     "test:orders": "jest tests/orders.test.js --runInBand",
     "test:cart": "jest tests/cart.test.js --runInBand",
-    "test:delivery": "jest tests/delivery.test.js --runInBand"
+    "test:delivery": "jest tests/delivery.test.js --runInBand",
+    "test:expenses": "jest tests/expenses.test.js --runInBand"
   },
   "keywords": [],
   "author": "",
