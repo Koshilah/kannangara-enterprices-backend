@@ -1,9 +1,4 @@
-process.env.NODE_ENV = "test";
-process.env.JWT_PRIVATE_KEY = "users-route-test-access-secret";
-process.env.REFRESH_TOKEN_SECRET = "users-route-test-refresh-secret";
-process.env.MONGODB_TEST_URI =
-  process.env.MONGODB_TEST_URI ||
-  "mongodb+srv://koshila0408_db_user:637sCbXEiSf7EP4b@cluster0.bk9fvae.mongodb.net/kannangara_enterprises_test";
+const { mongodbTestUri } = require("./testConfig");
 
 const request = require("supertest");
 const bcrypt = require("bcrypt");
@@ -33,7 +28,7 @@ function authorizationFor(user) {
 
 describe("users routes", () => {
   beforeAll(async () => {
-    await connectDatabase(process.env.MONGODB_TEST_URI, {
+    await connectDatabase(mongodbTestUri, {
       serverSelectionTimeoutMS: 3000,
     });
   }, 10000);

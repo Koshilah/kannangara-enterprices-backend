@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon index.js",
     "test": "jest --runInBand",
-    "test:users": "jest tests/users.test.js --runInBand"
+    "test:users": "jest tests/users.test.js --runInBand",
+    "test:auth": "jest tests/auth.test.js --runInBand"
   },
   "keywords": [],
   "author": "",
