@@ -10,7 +10,8 @@
     "test:auth": "jest tests/auth.test.js --runInBand",
     "test:suppliers": "jest tests/suppliers.test.js --runInBand",
     "test:products": "jest tests/products.test.js --runInBand",
-    "test:orders": "jest tests/orders.test.js --runInBand"
+    "test:orders": "jest tests/orders.test.js --runInBand",
+    "test:cart": "jest tests/cart.test.js --runInBand"
   },
   "keywords": [],
   "author": "",
