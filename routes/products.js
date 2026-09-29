@@ -1,6 +1,8 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const route = express.Router();
 const { Product, inputValidation } = require("../models/product");
+const { Category } = require("../models/category");
 const { User } = require("../models/user");
 const auth = require("../middleware/auth");
 const admin = require("../middleware/admin");
@@ -21,23 +23,40 @@ route.get("/", async (req, res) => {
 
 route.get("/out-of-stock", [auth, admin], async (req, res) => {
   try {
-    const products = await Product.find({ outOfStock: true }).sort({ createdAt: -1 });
+    const products = await Product.find({ outOfStock: true }).sort({
+      createdAt: -1,
+    });
 
     res.send({ success: true, data: products });
   } catch (error) {
-    res.status(500).send({ success: false, message: "Error occured: " + error });
+    res
+      .status(500)
+      .send({ success: false, message: "Error occured: " + error });
   }
 });
 
 route.get("/category/:categoryId", async (req, res) => {
   try {
+    const categoryIds = [req.params.categoryId];
+
+    if (mongoose.Types.ObjectId.isValid(req.params.categoryId)) {
+      const subcategories = await Category.find({
+        parentID: req.params.categoryId,
+      }).select("_id");
+      categoryIds.push(
+        ...subcategories.map((subcategory) => subcategory._id.toString()),
+      );
+    }
+
     const products = await Product.find({
-      category: { $in: [req.params.categoryId] },
+      category: { $in: categoryIds },
     }).sort({ createdAt: -1 });
 
     res.send({ success: true, data: products });
   } catch (error) {
-    res.status(500).send({ success: false, message: "Error occured: " + error });
+    res
+      .status(500)
+      .send({ success: false, message: "Error occured: " + error });
   }
 });
 
@@ -77,12 +96,16 @@ route.patch("/:id/stock", [auth, inventory], async (req, res) => {
     );
 
     if (!product) {
-      return res.status(404).send({ success: false, message: "Product not found" });
+      return res
+        .status(404)
+        .send({ success: false, message: "Product not found" });
     }
 
     return res.send({ success: true, data: product });
   } catch (error) {
-    return res.status(500).send({ success: false, message: "Error occurred while updating stock" });
+    return res
+      .status(500)
+      .send({ success: false, message: "Error occurred while updating stock" });
   }
 });
 
@@ -96,7 +119,17 @@ route.put("/:id", [auth, catalog], async (req, res) => {
         message: "Product not found",
       });
 
-    ["title", "description", "category", "price", "discountPrice", "imageURL", "totalStock", "outOfStock", "visibility"].forEach((field) => {
+    [
+      "title",
+      "description",
+      "category",
+      "price",
+      "discountPrice",
+      "imageURL",
+      "totalStock",
+      "outOfStock",
+      "visibility",
+    ].forEach((field) => {
       if (req.body[field] !== undefined) product[field] = req.body[field];
     });
 
@@ -129,7 +162,9 @@ route.delete("/:id", [auth, catalog], async (req, res) => {
       message: "Product deleted successfully",
     });
   } catch (error) {
-    res.status(500).send({ success: false, message: "Error occured: " + error });
+    res
+      .status(500)
+      .send({ success: false, message: "Error occured: " + error });
   }
 });
 

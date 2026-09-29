@@ -5,6 +5,7 @@ const mongoose = require("mongoose");
 const app = require("../app");
 const connectDatabase = require("../startup/db");
 const { Product } = require("../models/product");
+const { Category } = require("../models/category");
 const { User } = require("../models/user");
 const { signAccessToken } = require("../utils/tokens");
 
@@ -55,7 +56,11 @@ describe("product routes", () => {
   }, 10000);
 
   beforeEach(async () => {
-    await Promise.all([Product.deleteMany({}), User.deleteMany({})]);
+    await Promise.all([
+      Product.deleteMany({}),
+      User.deleteMany({}),
+      Category.deleteMany({}),
+    ]);
 
     const admin = await createUser({
       email: "product-admin@example.com",
@@ -105,6 +110,26 @@ describe("product routes", () => {
     expect(response.status).toBe(200);
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0].category).toContain("drinks");
+  });
+
+  test("includes subcategory products when filtering by a main category", async () => {
+    const mainCategory = await Category.create({ name: "Beverages" });
+    const subcategory = await Category.create({
+      name: "Cold Drinks",
+      parentID: mainCategory._id,
+    });
+    await createProduct({ category: [subcategory._id.toString()] });
+    await createProduct({ title: "Unrelated Product", category: ["snacks"] });
+
+    const response = await request(app).get(
+      `/api/product/category/${mainCategory._id}`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0].category).toContain(
+      subcategory._id.toString(),
+    );
   });
 
   test("returns a product by ID and 404 for a missing product", async () => {
