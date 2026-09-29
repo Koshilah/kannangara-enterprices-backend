@@ -4,6 +4,7 @@ const route = express.Router();
 const auth = require("../middleware/auth");
 const admin = require("../middleware/admin");
 const { Delivery, DELIVERY_STATUSES } = require("../models/delivery");
+const Order = require("../models/order");
 
 route.get("/", [auth, admin], async (req, res) => {
   try {
@@ -39,11 +40,40 @@ route.patch("/status", [auth, admin], async (req, res) => {
   }
 
   try {
-    const delivery = await Delivery.findByIdAndUpdate(
-      deliveryID,
-      { status },
-      { new: true, runValidators: true },
-    );
+    const session = await mongoose.startSession();
+    let delivery;
+
+    try {
+      session.startTransaction();
+      delivery = await Delivery.findByIdAndUpdate(
+        deliveryID,
+        { status },
+        { new: true, runValidators: true, session },
+      );
+
+      if (delivery && status === "delivered") {
+        const order = await Order.findById(delivery.orderID).session(session);
+
+        if (order) {
+          order.orderStatus = "delivered";
+
+          if (order.paymentMethod?.toLowerCase().includes("cash")) {
+            order.paymentStatus = "paid";
+            order.paidAt ||= new Date();
+          }
+
+          await order.save({ session });
+        }
+      }
+
+      if (!delivery) {
+        await session.abortTransaction();
+      } else {
+        await session.commitTransaction();
+      }
+    } finally {
+      await session.endSession();
+    }
 
     if (!delivery) {
       return res.status(404).send({

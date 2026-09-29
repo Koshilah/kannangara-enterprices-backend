@@ -127,7 +127,10 @@ describe("order routes", () => {
     const missingCartResponse = await request(app)
       .post("/api/order")
       .set("Authorization", userAuthorization)
-      .send({ paymentMethod: "Card", deliveryAddress: "1 Test Road" });
+      .send({
+        paymentMethod: "Cash on Delivery",
+        deliveryAddress: "1 Test Road",
+      });
     expect(missingCartResponse.status).toBe(404);
     expect(missingCartResponse.body.message).toBe("Cart not found");
 
@@ -135,9 +138,34 @@ describe("order routes", () => {
     const emptyCartResponse = await request(app)
       .post("/api/order")
       .set("Authorization", userAuthorization)
-      .send({ paymentMethod: "Card", deliveryAddress: "1 Test Road" });
+      .send({
+        paymentMethod: "Cash on Delivery",
+        deliveryAddress: "1 Test Road",
+      });
     expect(emptyCartResponse.status).toBe(400);
     expect(emptyCartResponse.body.message).toBe("Cart is empty");
+  });
+
+  test("rejects card orders while card payments are disabled", async () => {
+    const product = await createProduct();
+    const cart = await Cart.create({
+      userId: user._id,
+      items: [{ productId: product._id, quantity: 1 }],
+    });
+
+    const response = await request(app)
+      .post("/api/order")
+      .set("Authorization", userAuthorization)
+      .send({
+        cartID: cart._id,
+        paymentMethod: "Visa / MasterCard",
+        deliveryAddress: "1 Test Road",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe(
+      "Only cash payment is currently available",
+    );
   });
 
   test("creates a delivery order, creates delivery tracking, and clears the cart", async () => {
@@ -152,14 +180,14 @@ describe("order routes", () => {
       .set("Authorization", userAuthorization)
       .send({
         cartID: cart._id,
-        paymentMethod: "Card",
+        paymentMethod: "Cash on Delivery",
         deliveryAddress: "1 Test Road",
       });
 
     expect(response.status).toBe(201);
     expect(response.body.message).toBe("Order created successfully");
     expect(response.body.data.orderTotal).toBe(160);
-    expect(response.body.data.paymentStatus).toBe("successful");
+    expect(response.body.data.paymentStatus).toBe("pending");
     expect(response.body.data.orderType).toBe("delivery");
     expect(
       await Cart.findById(cart._id).then((savedCart) => savedCart.items),

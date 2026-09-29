@@ -7,6 +7,7 @@ const Cart = require("../models/cart");
 const Order = require("../models/order");
 const { Delivery } = require("../models/delivery");
 const { Product } = require("../models/product");
+const { CARD_PAYMENTS_ENABLED } = require("../config/payment");
 
 function isValidObjectId(value) {
   return mongoose.Types.ObjectId.isValid(value);
@@ -31,6 +32,16 @@ route.post("/", auth, async (req, res) => {
     return res.status(400).send({
       success: false,
       message: "deliveryAddress is required for delivery orders",
+    });
+  }
+
+  const normalizedPaymentMethod = paymentMethod.trim().toLowerCase();
+  const isCashPayment = normalizedPaymentMethod.includes("cash");
+
+  if (!CARD_PAYMENTS_ENABLED && !isCashPayment) {
+    return res.status(400).send({
+      success: false,
+      message: "Only cash payment is currently available",
     });
   }
 
@@ -127,7 +138,7 @@ route.post("/", auth, async (req, res) => {
         ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
         : undefined;
 
-    const isOnlinePayment = !paymentMethod?.toLowerCase().includes("cash");
+    const isOnlinePayment = !isCashPayment;
     const paymentStatus = isOnlinePayment ? "successful" : "pending";
     const paymentID = isOnlinePayment
       ? "PAY-" +

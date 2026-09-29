@@ -138,6 +138,21 @@ describe("delivery routes", () => {
     );
   });
 
+  test("settles a newly created cash order when delivery is completed", async () => {
+    const { delivery, order } = await createDelivery(user);
+
+    const response = await request(app)
+      .patch("/api/delivery/status")
+      .set("Authorization", adminAuthorization)
+      .send({ deliveryID: delivery._id, status: "delivered" });
+
+    expect(response.status).toBe(200);
+    const savedOrder = await Order.findById(order._id);
+    expect(savedOrder.orderStatus).toBe("delivered");
+    expect(savedOrder.paymentStatus).toBe("paid");
+    expect(savedOrder.paidAt).toEqual(expect.any(Date));
+  });
+
   test("rejects invalid delivery status and IDs", async () => {
     const invalidIdResponse = await request(app)
       .patch("/api/delivery/status")
