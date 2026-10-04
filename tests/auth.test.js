@@ -176,4 +176,88 @@ describe("auth routes", () => {
       expect(tokenDocument.revokedAt).not.toBeNull();
     });
   });
+
+  describe("POST /api/auth/verify-email", () => {
+    test("rejects missing or invalid email", async () => {
+      const missingResponse = await request(app)
+        .post("/api/auth/verify-email")
+        .send({});
+      expect(missingResponse.status).toBe(400);
+      expect(missingResponse.body.message).toBe("Provide a valid email address!");
+
+      const invalidResponse = await request(app)
+        .post("/api/auth/verify-email")
+        .send({ email: "invalid-email" });
+      expect(invalidResponse.status).toBe(400);
+      expect(invalidResponse.body.message).toBe("Provide a valid email address!");
+    });
+
+    test("returns 404 if email does not exist", async () => {
+      const response = await request(app)
+        .post("/api/auth/verify-email")
+        .send({ email: "notfound@example.com" });
+      expect(response.status).toBe(404);
+      expect(response.body.message).toBe("No account found with this email!");
+    });
+
+    test("returns 200 if email exists", async () => {
+      await createUser({ email: "exists@example.com" });
+      const response = await request(app)
+        .post("/api/auth/verify-email")
+        .send({ email: "exists@example.com" });
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe("Email verified successfully.");
+    });
+  });
+
+  describe("POST /api/auth/reset-password", () => {
+    test("rejects invalid email or weak password", async () => {
+      const invalidEmailResponse = await request(app)
+        .post("/api/auth/reset-password")
+        .send({ email: "bad-email", password: validPassword });
+      expect(invalidEmailResponse.status).toBe(400);
+      expect(invalidEmailResponse.body.message).toBe("Provide a valid email address!");
+
+      const weakPasswordResponse = await request(app)
+        .post("/api/auth/reset-password")
+        .send({ email: "user@example.com", password: "123" });
+      expect(weakPasswordResponse.status).toBe(400);
+      expect(weakPasswordResponse.body.message).toContain(
+        "Use a valid password with at least 8 characters",
+      );
+    });
+
+    test("returns 404 for nonexistent email", async () => {
+      const response = await request(app)
+        .post("/api/auth/reset-password")
+        .send({ email: "missing@example.com", password: "NewPassword1!" });
+      expect(response.status).toBe(404);
+      expect(response.body.message).toBe("User not found!");
+    });
+
+    test("successfully updates password and invalidates previous credentials", async () => {
+      const user = await createUser({ email: "resetme@example.com" });
+      const newPassword = "UpdatedPassword1@";
+
+      const resetResponse = await request(app)
+        .post("/api/auth/reset-password")
+        .send({ email: "resetme@example.com", password: newPassword });
+      expect(resetResponse.status).toBe(200);
+      expect(resetResponse.body.message).toBe("Password updated successfully.");
+
+      // Login with old password should fail
+      const oldLoginResponse = await request(app)
+        .post("/api/auth")
+        .send({ email: "resetme@example.com", password: validPassword });
+      expect(oldLoginResponse.status).toBe(400);
+
+      // Login with new password should succeed
+      const newLoginResponse = await request(app)
+        .post("/api/auth")
+        .send({ email: "resetme@example.com", password: newPassword });
+      expect(newLoginResponse.status).toBe(200);
+      expect(newLoginResponse.headers["x-auth-token"]).toBeTruthy();
+    });
+  });
 });

@@ -1,6 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const Joi = require("joi");
 const route = express.Router();
 const { User } = require("../models/user");
 const {
@@ -13,6 +14,19 @@ const {
   rotateRefreshToken,
 } = require("../utils/tokens");
 const RefreshToken = require("../models/refreshToken");
+
+const emailValidationSchema = Joi.string().email().min(6).max(50).required();
+const passwordValidationSchema = Joi.string()
+  .pattern(new RegExp(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/))
+  .required();
+
+function findUserByEmail(email) {
+  const normalizedEmail = (email || "").trim();
+  const escaped = normalizedEmail.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+  return User.findOne({
+    $or: [{ email: normalizedEmail }, { email: { $regex: new RegExp(`^${escaped}$`, "i") } }],
+  });
+}
 
 route.post("/", async (req, res) => {
   if (!req.body.email || !req.body.password)
@@ -57,6 +71,74 @@ route.post("/", async (req, res) => {
     res
       .status(500)
       .send({ success: false, message: "Error occured: " + error });
+  }
+});
+
+route.post("/verify-email", async (req, res) => {
+  const { email } = req.body;
+  const { error } = emailValidationSchema.validate(email);
+  if (!email || error) {
+    return res
+      .status(400)
+      .send({ success: false, message: "Provide a valid email address!" });
+  }
+
+  try {
+    const user = await findUserByEmail(email);
+    if (!user) {
+      return res
+        .status(404)
+        .send({ success: false, message: "No account found with this email!" });
+    }
+
+    res.send({ success: true, message: "Email verified successfully." });
+  } catch (error) {
+    res
+      .status(500)
+      .send({ success: false, message: "Error occurred: " + error });
+  }
+});
+
+route.post("/reset-password", async (req, res) => {
+  const { email, password } = req.body;
+  const emailError = emailValidationSchema.validate(email).error;
+  if (!email || emailError) {
+    return res
+      .status(400)
+      .send({ success: false, message: "Provide a valid email address!" });
+  }
+
+  const passwordError = passwordValidationSchema.validate(password).error;
+  if (!password || passwordError) {
+    return res.status(400).send({
+      success: false,
+      message:
+        "Use a valid password with at least 8 characters, including uppercase, lowercase, number, and symbol.",
+    });
+  }
+
+  try {
+    const user = await findUserByEmail(email);
+    if (!user) {
+      return res
+        .status(404)
+        .send({ success: false, message: "User not found!" });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(password, salt);
+    await user.save();
+
+    await RefreshToken.updateMany(
+      { user: user._id, revokedAt: null },
+      { $set: { revokedAt: new Date() } },
+    );
+
+    res.send({ success: true, message: "Password updated successfully." });
+  } catch (error) {
+    res
+      .status(500)
+      .send({ success: false, message: "Error occurred: " + error });
   }
 });
 
@@ -109,8 +191,7 @@ route.post("/refresh", async (req, res) => {
   }
 });
 
-
-route.post('/logout', async (req, res) => {
+route.post("/logout", async (req, res) => {
   try {
     const token = req.cookies?.refresh_token;
     if (token) {
@@ -121,11 +202,12 @@ route.post('/logout', async (req, res) => {
         await doc.save();
       }
     }
-    res.clearCookie('refresh_token', { path: '/api/auth/refresh' });
-    res.json({success: true, message: 'Logged out' });
+    res.clearCookie("refresh_token", { path: "/api/auth/refresh" });
+    res.json({ success: true, message: "Logged out" });
   } catch (error) {
-    res.status(500).json({success:false, message: 'Server error' + error});
+    res.status(500).json({ success: false, message: "Server error" + error });
   }
-})
+});
 
 module.exports = route;
+
