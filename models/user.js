@@ -61,12 +61,10 @@ const inputValidation = (req) => {
   const schema = Joi.object({
     name: Joi.string().min(2).max(40).required(),
     email: Joi.string().email().min(6).max(50).required(),
-    phone: Joi.string().allow("").optional(),
+    phone: Joi.number().min(9).max(10).optional(),
     password: Joi.string()
       .pattern(new RegExp(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/))
       .required(),
-    //isAdmin: Joi.boolean(),
-    //isMannager: Joi.boolean(),
   });
 
   const { error } = schema.validate(req);

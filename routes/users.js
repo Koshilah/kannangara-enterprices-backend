@@ -156,10 +156,10 @@ route.patch("/profile", auth, async (req, res) => {
       .status(400)
       .send({ success: false, message: "Provide a valid email address." });
 
-  if (phone !== undefined && phone !== null && phone.trim().length > 25) {
+  if (phone !== undefined && phone !== null && phone.trim().length > 10) {
     return res.status(400).send({
       success: false,
-      message: "Phone number cannot exceed 25 characters.",
+      message: "Invalid Phone Number",
     });
   }
 
