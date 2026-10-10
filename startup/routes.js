@@ -16,6 +16,7 @@ const cloudinary = require("../routes/cloudinary");
 const address = require("../routes/address");
 const messages = require("../routes/messages");
 const heroSlides = require("../routes/heroSlides");
+const auditLogs = require("../routes/auditLogs");
 
 module.exports = (app) => {
   app.use(
@@ -41,4 +42,5 @@ module.exports = (app) => {
   app.use("/api/address", address);
   app.use("/api/message", messages);
   app.use("/api/hero-slide", heroSlides);
+  app.use("/api/audit-logs", auditLogs);
 };

@@ -36,6 +36,7 @@ const auditLogSchema = new mongoose.Schema(
 );
 
 auditLogSchema.index({ userId: 1, timestamp: -1 });
+auditLogSchema.index({ timestamp: 1, _id: 1 });
 auditLogSchema.index({ action: 1, timestamp: -1 });
 auditLogSchema.index({ targetResource: 1, targetId: 1, timestamp: -1 });
 
