@@ -189,6 +189,9 @@ describe("order routes", () => {
     expect(response.body.data.orderTotal).toBe(160);
     expect(response.body.data.paymentStatus).toBe("pending");
     expect(response.body.data.orderType).toBe("delivery");
+    const updatedProduct = await Product.findById(product._id);
+    expect(updatedProduct.totalStock).toBe(8);
+    expect(updatedProduct.outOfStock).toBe(false);
     expect(
       await Cart.findById(cart._id).then((savedCart) => savedCart.items),
     ).toHaveLength(0);

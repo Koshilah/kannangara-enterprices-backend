@@ -77,6 +77,7 @@ route.post("/", auth, async (req, res) => {
     }
 
     const orderItems = [];
+    const productsToDeduct = [];
     let subtotal = 0;
     let totalSavings = 0;
 
@@ -118,6 +119,13 @@ route.post("/", auth, async (req, res) => {
         : isValidObjectId(item.productId)
           ? item.productId
           : new mongoose.Types.ObjectId();
+
+      if (product) {
+        productsToDeduct.push({
+          productID: product._id,
+          quantity,
+        });
+      }
 
       orderItems.push({
         productID,
@@ -165,6 +173,28 @@ route.post("/", auth, async (req, res) => {
     session = await mongoose.startSession();
     session.startTransaction();
 
+    for (const { productID, quantity } of productsToDeduct) {
+      const updatedProduct = await Product.findOneAndUpdate(
+        { _id: productID, totalStock: { $gte: quantity } },
+        { $inc: { totalStock: -quantity } },
+        { new: true, session, runValidators: true },
+      );
+
+      if (!updatedProduct) {
+        const stockError = new Error(
+          "Insufficient stock for one or more products",
+        );
+        stockError.statusCode = 409;
+        throw stockError;
+      }
+
+      await Product.updateOne(
+        { _id: productID },
+        { $set: { outOfStock: updatedProduct.totalStock === 0 } },
+        { session },
+      );
+    }
+
     await order.save({ session });
 
     if (orderType === "delivery") {
@@ -178,7 +208,6 @@ route.post("/", auth, async (req, res) => {
       await delivery.save({ session });
     }
 
-    // Empty the user's cart upon order placement
     cart.items = [];
     await cart.save({ session });
 
@@ -194,9 +223,10 @@ route.post("/", auth, async (req, res) => {
       await session.abortTransaction();
     }
 
-    res
-      .status(500)
-      .send({ success: false, message: "Error occured: " + error });
+    res.status(error.statusCode || 500).send({
+      success: false,
+      message: error.statusCode ? error.message : "Error occured: " + error,
+    });
   } finally {
     await session?.endSession();
   }
