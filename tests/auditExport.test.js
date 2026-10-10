@@ -40,6 +40,23 @@ function auditEntry(userId, timestamp, overrides = {}) {
   };
 }
 
+function expectPdfText(pdfText, expected) {
+  const utf16be = Buffer.alloc(expected.length * 2);
+  for (let index = 0; index < expected.length; index += 1) {
+    utf16be.writeUInt16BE(expected.charCodeAt(index), index * 2);
+  }
+  const representations = [
+    expected,
+    Buffer.from(expected).toString("hex"),
+    utf16be.toString("hex"),
+  ];
+  expect(
+    representations.some((representation) =>
+      pdfText.toLowerCase().includes(representation.toLowerCase()),
+    ),
+  ).toBe(true);
+}
+
 describe("audit log export", () => {
   let manager;
   let cashier;
@@ -141,8 +158,21 @@ describe("audit log export", () => {
   });
 
   test("streams a PDF with a safe download disposition", async () => {
+    await AuditLog.create([
+      auditEntry(cashier._id, new Date("2026-10-05T10:00:00.000Z"), {
+        action: "PRODUCT_UPDATED",
+        targetId: "507f1f77bcf86cd799439011",
+        changes: { before: { name: "A" }, after: { name: "B" } },
+      }),
+      auditEntry(cashier._id, new Date("2026-10-05T11:00:00.000Z"), {
+        action: "LOGIN_FAILED",
+        targetResource: "Authentication",
+        targetId: "507f1f77bcf86cd799439012",
+        statusCode: 200,
+      }),
+    ]);
     const response = await request(app)
-      .get("/api/audit-logs/export?format=pdf")
+      .get(`/api/audit-logs/export?format=pdf&userId=${cashier._id}`)
       .set("Authorization", authHeader(manager));
     expect(response.status).toBe(200);
     expect(response.headers["content-type"]).toMatch(/^application\/pdf/);
@@ -150,5 +180,25 @@ describe("audit log export", () => {
       /^attachment; filename="employee-actions-\d{4}-\d{2}-\d{2}\.pdf"$/,
     );
     expect(response.body.subarray(0, 4).toString()).toBe("%PDF");
+    const pdfText = response.body.toString("latin1");
+    expectPdfText(pdfText, "Kannangara Enterprises");
+    expectPdfText(pdfText, "Report Cashier");
+    expectPdfText(pdfText, cashier.email);
+    expectPdfText(pdfText, "Report Manager");
+    expectPdfText(pdfText, "Reporting period:");
+    expectPdfText(pdfText, "Oct 5, 2026");
+    expectPdfText(pdfText, "Action");
+    expectPdfText(pdfText, "Outcome");
+    expectPdfText(pdfText, "PRODUCT_UPDATED");
+    expectPdfText(pdfText, "LOGIN_FAILED");
+    expectPdfText(pdfText, "Product");
+    expectPdfText(pdfText, "Authentication");
+    expectPdfText(pdfText, "507f1f77bcf86cd799439011");
+    expectPdfText(pdfText, "507f1f77bcf86cd799439012");
+    expectPdfText(pdfText, "Success");
+    expectPdfText(pdfText, "Failed");
+    expect(pdfText).not.toContain("/api/audit-logs/export");
+    expect(pdfText).not.toContain("/api/product/1");
+    expect(pdfText).not.toContain('"before"');
   });
 });
