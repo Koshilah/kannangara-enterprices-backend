@@ -5,6 +5,7 @@ const auth = require("../middleware/auth");
 const admin = require("../middleware/admin");
 const Expense = require("../models/expense");
 const { EXPENSE_CATEGORIES } = require("../models/expense");
+const { auditRequest } = require("../utils/auditLogger");
 
 //read all expenses
 route.get("/", [auth, admin], async (req, res) => {
@@ -63,6 +64,13 @@ route.post("/", [auth, admin], async (req, res) => {
       date,
     });
 
+    auditRequest(req, res, {
+      action: "EXPENSE_CREATED",
+      targetResource: "Expense",
+      targetId: expense._id,
+      changes: { after: expense },
+    });
+
     return res.status(201).send({
       success: true,
       message: "Expense added successfully",
@@ -117,6 +125,7 @@ route.patch("/:expenseId", [auth, admin], async (req, res) => {
   }
 
   try {
+    const beforeExpense = await Expense.findById(expenseId);
     const expense = await Expense.findByIdAndUpdate(
       expenseId,
       {
@@ -134,6 +143,13 @@ route.patch("/:expenseId", [auth, admin], async (req, res) => {
         message: "Expense not found",
       });
     }
+
+    auditRequest(req, res, {
+      action: "EXPENSE_UPDATED",
+      targetResource: "Expense",
+      targetId: expense._id,
+      changes: { before: beforeExpense, after: expense },
+    });
 
     return res.send({
       success: true,
@@ -168,6 +184,13 @@ route.delete("/:expenseId", [auth, admin], async (req, res) => {
         message: "Expense not found",
       });
     }
+
+    auditRequest(req, res, {
+      action: "EXPENSE_DELETED",
+      targetResource: "Expense",
+      targetId: expense._id,
+      changes: { before: expense },
+    });
 
     return res.send({
       success: true,

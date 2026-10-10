@@ -5,6 +5,7 @@ const auth = require("../middleware/auth");
 const admin = require("../middleware/admin");
 const { Delivery, DELIVERY_STATUSES } = require("../models/delivery");
 const Order = require("../models/order");
+const { auditRequest } = require("../utils/auditLogger");
 
 route.get("/", [auth, admin], async (req, res) => {
   try {
@@ -42,6 +43,9 @@ route.patch("/status", [auth, admin], async (req, res) => {
   try {
     const session = await mongoose.startSession();
     let delivery;
+    const beforeDelivery = await Delivery.findById(deliveryID).select(
+      "status dueDate orderID",
+    );
 
     try {
       session.startTransaction();
@@ -82,6 +86,16 @@ route.patch("/status", [auth, admin], async (req, res) => {
       });
     }
 
+    auditRequest(req, res, {
+      action: "DELIVERY_STATUS_UPDATED",
+      targetResource: "Delivery",
+      targetId: delivery._id,
+      changes: {
+        before: beforeDelivery,
+        after: { status: delivery.status },
+      },
+    });
+
     return res.send({
       success: true,
       message: "Delivery status updated successfully",
@@ -113,6 +127,9 @@ route.patch("/due-date", [auth, admin], async (req, res) => {
   }
 
   try {
+    const beforeDelivery = await Delivery.findById(deliveryID).select(
+      "dueDate status orderID",
+    );
     const delivery = await Delivery.findByIdAndUpdate(
       deliveryID,
       { dueDate: new Date(dueDate) },
@@ -125,6 +142,16 @@ route.patch("/due-date", [auth, admin], async (req, res) => {
         message: "Delivery not found",
       });
     }
+
+    auditRequest(req, res, {
+      action: "DELIVERY_DUE_DATE_UPDATED",
+      targetResource: "Delivery",
+      targetId: delivery._id,
+      changes: {
+        before: beforeDelivery,
+        after: { dueDate: delivery.dueDate },
+      },
+    });
 
     return res.send({
       success: true,
@@ -167,6 +194,13 @@ route.delete("/:deliveryId", [auth, admin], async (req, res) => {
     }
 
     await delivery.deleteOne();
+
+    auditRequest(req, res, {
+      action: "DELIVERY_DELETED",
+      targetResource: "Delivery",
+      targetId: delivery._id,
+      changes: { before: delivery },
+    });
 
     return res.send({
       success: true,

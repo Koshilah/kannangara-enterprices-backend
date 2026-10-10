@@ -14,33 +14,51 @@ const {
   rotateRefreshToken,
 } = require("../utils/tokens");
 const RefreshToken = require("../models/refreshToken");
+const { auditRequest, getUserRole } = require("../utils/auditLogger");
 
 const emailValidationSchema = Joi.string().email().min(6).max(50).required();
 const passwordValidationSchema = Joi.string()
   .pattern(new RegExp(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/))
   .required();
 
+function sendLoginFailure(
+  req,
+  res,
+  reason,
+  message = "Invalid email or password",
+) {
+  auditRequest(req, res, {
+    action: "LOGIN_FAILED",
+    targetResource: "Authentication",
+    changes: { after: { reason } },
+  });
+  return res.status(400).send({ success: false, message });
+}
+
 function findUserByEmail(email) {
   const normalizedEmail = (email || "").trim();
   const escaped = normalizedEmail.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
   return User.findOne({
-    $or: [{ email: normalizedEmail }, { email: { $regex: new RegExp(`^${escaped}$`, "i") } }],
+    $or: [
+      { email: normalizedEmail },
+      { email: { $regex: new RegExp(`^${escaped}$`, "i") } },
+    ],
   });
 }
 
 route.post("/", async (req, res) => {
   if (!req.body.email || !req.body.password)
-    return res
-      .status(400)
-      .send({ success: false, message: "Provide both email and password!" });
+    return sendLoginFailure(
+      req,
+      res,
+      "missing_credentials",
+      "Provide both email and password!",
+    );
 
   try {
     const user = await User.findOne({ email: req.body.email });
 
-    if (!user)
-      return res
-        .status(400)
-        .send({ success: false, message: "Invalid email or password" });
+    if (!user) return sendLoginFailure(req, res, "invalid_credentials");
 
     const isPasswordMatch = await bcrypt.compare(
       req.body.password,
@@ -48,9 +66,7 @@ route.post("/", async (req, res) => {
     );
 
     if (!isPasswordMatch)
-      return res
-        .status(400)
-        .send({ success: false, message: "Invalid email or password" });
+      return sendLoginFailure(req, res, "invalid_credentials");
 
     const accessToken = signAccessToken(user);
     const jti = createJti();
@@ -66,8 +82,20 @@ route.post("/", async (req, res) => {
 
     setRefreshCookie(res, refreshToken);
 
+    auditRequest(req, res, {
+      action: "LOGIN_SUCCEEDED",
+      targetResource: "Authentication",
+      userId: user._id,
+      userRole: getUserRole(user),
+    });
+
     res.header("x-auth-token", accessToken).send(accessToken);
   } catch (error) {
+    auditRequest(req, res, {
+      action: "LOGIN_FAILED",
+      targetResource: "Authentication",
+      changes: { after: { reason: "server_error" } },
+    });
     res
       .status(500)
       .send({ success: false, message: "Error occured: " + error });
@@ -210,4 +238,3 @@ route.post("/logout", async (req, res) => {
 });
 
 module.exports = route;
-

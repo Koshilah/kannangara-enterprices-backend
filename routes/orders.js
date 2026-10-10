@@ -8,6 +8,7 @@ const Order = require("../models/order");
 const { Delivery } = require("../models/delivery");
 const { Product } = require("../models/product");
 const { CARD_PAYMENTS_ENABLED } = require("../config/payment");
+const { auditRequest } = require("../utils/auditLogger");
 
 function isValidObjectId(value) {
   return mongoose.Types.ObjectId.isValid(value);
@@ -348,6 +349,7 @@ route.patch("/:orderID/cancel", auth, async (req, res) => {
     session = await mongoose.startSession();
     session.startTransaction();
 
+    const beforeOrderStatus = order.orderStatus;
     order.orderStatus = "cancelled";
     await order.save({ session });
 
@@ -358,6 +360,19 @@ route.patch("/:orderID/cancel", auth, async (req, res) => {
     );
 
     await session.commitTransaction();
+
+    if (req.user.isAdmin) {
+      auditRequest(req, res, {
+        action: "ORDER_CANCELLED",
+        targetResource: "Order",
+        targetId: order._id,
+        changes: {
+          before: { orderStatus: beforeOrderStatus },
+          after: { orderStatus: "cancelled" },
+        },
+      });
+    }
+
     return res.send({
       success: true,
       message: "Order cancelled successfully",
@@ -403,9 +418,20 @@ route.patch("/:orderID/payment", [auth, admin], async (req, res) => {
         .send({ success: false, message: "Order not found" });
     }
 
+    const beforePaymentStatus = order.paymentStatus;
     order.paymentStatus = paymentStatus;
     order.paidAt = paymentStatus === "paid" ? new Date() : undefined;
     await order.save();
+
+    auditRequest(req, res, {
+      action: "ORDER_PAYMENT_UPDATED",
+      targetResource: "Order",
+      targetId: order._id,
+      changes: {
+        before: { paymentStatus: beforePaymentStatus },
+        after: { paymentStatus: order.paymentStatus },
+      },
+    });
 
     return res.send({
       success: true,
@@ -431,6 +457,7 @@ route.patch("/", [auth, admin], async (req, res) => {
   }
 
   try {
+    const beforeOrder = await Order.findById(orderID).select("orderStatus");
     const order = await Order.findByIdAndUpdate(
       orderID,
       { orderStatus },
@@ -443,6 +470,16 @@ route.patch("/", [auth, admin], async (req, res) => {
         message: "Order not found",
       });
     }
+
+    auditRequest(req, res, {
+      action: "ORDER_STATUS_UPDATED",
+      targetResource: "Order",
+      targetId: order._id,
+      changes: {
+        before: beforeOrder,
+        after: { orderStatus: order.orderStatus },
+      },
+    });
 
     res.send({
       success: true,

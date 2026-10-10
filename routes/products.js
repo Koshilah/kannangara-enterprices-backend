@@ -8,6 +8,7 @@ const auth = require("../middleware/auth");
 const admin = require("../middleware/admin");
 const inventory = require("../middleware/inventory");
 const catalog = require("../middleware/catalog");
+const { auditRequest } = require("../utils/auditLogger");
 
 route.get("/", async (req, res) => {
   try {
@@ -89,6 +90,9 @@ route.patch("/:id/stock", [auth, inventory], async (req, res) => {
   }
 
   try {
+    const beforeProduct = await Product.findById(req.params.id).select(
+      "totalStock outOfStock",
+    );
     const product = await Product.findByIdAndUpdate(
       req.params.id,
       { totalStock: quantity, outOfStock: quantity === 0 },
@@ -100,6 +104,16 @@ route.patch("/:id/stock", [auth, inventory], async (req, res) => {
         .status(404)
         .send({ success: false, message: "Product not found" });
     }
+
+    auditRequest(req, res, {
+      action: "INVENTORY_ADJUSTED",
+      targetResource: "Product",
+      targetId: product._id,
+      changes: {
+        before: beforeProduct,
+        after: product,
+      },
+    });
 
     return res.send({ success: true, data: product });
   } catch (error) {
@@ -119,6 +133,7 @@ route.put("/:id", [auth, catalog], async (req, res) => {
         message: "Product not found",
       });
 
+    const beforeProduct = product.toObject();
     [
       "title",
       "description",
@@ -134,6 +149,16 @@ route.put("/:id", [auth, catalog], async (req, res) => {
     });
 
     await product.save();
+
+    auditRequest(req, res, {
+      action: "PRODUCT_UPDATED",
+      targetResource: "Product",
+      targetId: product._id,
+      changes: {
+        before: beforeProduct,
+        after: product,
+      },
+    });
 
     res.send({
       success: true,
@@ -156,6 +181,13 @@ route.delete("/:id", [auth, catalog], async (req, res) => {
         success: false,
         message: "Product not found",
       });
+
+    auditRequest(req, res, {
+      action: "PRODUCT_DELETED",
+      targetResource: "Product",
+      targetId: product._id,
+      changes: { before: product },
+    });
 
     res.send({
       success: true,
@@ -204,6 +236,13 @@ route.post("/", [auth, catalog], async (req, res) => {
     });
 
     await newProduct.save();
+
+    auditRequest(req, res, {
+      action: "PRODUCT_CREATED",
+      targetResource: "Product",
+      targetId: newProduct._id,
+      changes: { after: newProduct },
+    });
 
     res.status(201).send({
       success: true,

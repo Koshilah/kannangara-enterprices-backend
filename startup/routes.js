@@ -1,6 +1,7 @@
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
+const audit = require("../middleware/audit");
 const user = require("../routes/users");
 const auth = require("../routes/auth");
 const cart = require("../routes/cart");
@@ -25,6 +26,7 @@ module.exports = (app) => {
   );
   app.use(express.json());
   app.use(cookieParser());
+  app.use(audit);
   app.use("/api/user", user);
   app.use("/api/auth", auth);
   app.use("/api/cart", cart);

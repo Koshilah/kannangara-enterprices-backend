@@ -7,6 +7,7 @@ const { User, inputValidation } = require("../models/user");
 const { signAccessToken } = require("../utils/tokens");
 const auth = require("../middleware/auth");
 const mannager = require("../middleware/manager");
+const { auditRequest } = require("../utils/auditLogger");
 
 const employeeFields = [
   "_id",
@@ -264,6 +265,14 @@ route.post("/employees", [auth, mannager], async (req, res) => {
     });
 
     await newUser.save();
+    auditRequest(req, res, {
+      action: "EMPLOYEE_CREATED",
+      targetResource: "User",
+      targetId: newUser._id,
+      changes: {
+        after: _.pick(newUser.toObject(), employeeFields),
+      },
+    });
     res.status(201).send({ success: true, data: getEmployee(newUser) });
   } catch (error) {
     res
@@ -286,6 +295,9 @@ route.patch("/employees/:id/role", [auth, mannager], async (req, res) => {
     });
 
   try {
+    const beforeUser = await User.findById(req.params.id).select(
+      employeeFields.join(" "),
+    );
     const user = await User.findByIdAndUpdate(
       req.params.id,
       { $set: flags },
@@ -297,6 +309,15 @@ route.patch("/employees/:id/role", [auth, mannager], async (req, res) => {
         .status(404)
         .send({ success: false, message: "Employee not found." });
 
+    auditRequest(req, res, {
+      action: "USER_ROLE_CHANGED",
+      targetResource: "User",
+      targetId: user._id,
+      changes: {
+        before: beforeUser,
+        after: user,
+      },
+    });
     res.send({ success: true, data: getEmployee(user) });
   } catch (error) {
     res
@@ -312,6 +333,9 @@ route.patch("/employees/:id/demote", [auth, mannager], async (req, res) => {
       .send({ success: false, message: "You cannot demote your own account." });
 
   try {
+    const beforeUser = await User.findById(req.params.id).select(
+      employeeFields.join(" "),
+    );
     const user = await User.findByIdAndUpdate(
       req.params.id,
       { $set: { isAdmin: false, isMannager: false, isCashier: false } },
@@ -333,6 +357,16 @@ route.patch("/employees/:id/demote", [auth, mannager], async (req, res) => {
       .status(500)
       .send({ success: false, message: "Unable to remove employee access." });
   }
+
+  auditRequest(req, res, {
+    action: "USER_DEMOTED",
+    targetResource: "User",
+    targetId: user._id,
+    changes: {
+      before: beforeUser,
+      after: user,
+    },
+  });
 });
 
 route.delete("/", auth, async (req, res) => {
@@ -361,6 +395,13 @@ route.delete("/", auth, async (req, res) => {
 
     await User.deleteOne({ _id: user._id });
 
+    auditRequest(req, res, {
+      action: "USER_DELETED",
+      targetResource: "User",
+      targetId: user._id,
+      changes: { before: user },
+    });
+
     res.send({ success: true, message: "Account deleted successfully." });
   } catch (error) {
     res
@@ -376,6 +417,9 @@ route.patch("/promote", [auth, mannager], async (req, res) => {
       .send({ success: false, message: "Provide a valid Email!" });
 
   try {
+    const beforeUser = await User.findOne({ email: req.body.email }).select(
+      employeeFields.join(" "),
+    );
     const user = await User.findOneAndUpdate(
       { email: req.body.email },
       { $set: { isAdmin: true } },
@@ -395,6 +439,16 @@ route.patch("/promote", [auth, mannager], async (req, res) => {
   } catch (error) {
     res.status(500).send("Error occured: " + error);
   }
+
+  auditRequest(req, res, {
+    action: "USER_PROMOTED",
+    targetResource: "User",
+    targetId: user._id,
+    changes: {
+      before: beforeUser,
+      after: user,
+    },
+  });
 });
 
 route.get("/", [auth, mannager], async (req, res) => {
