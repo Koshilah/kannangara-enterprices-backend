@@ -165,7 +165,7 @@ route.post("/", auth, async (req, res) => {
       orderType,
       paymentMethod,
       paymentStatus,
-      orderStatus: "successful",
+      orderStatus: "pending",
       paidAt: isOnlinePayment ? new Date() : undefined,
       deliveryAddress: finalDeliveryAddress,
       estimatedDeliveryDate,
@@ -340,7 +340,7 @@ route.patch("/:orderID/cancel", auth, async (req, res) => {
       });
     }
 
-    if (["cancelled", "delivered"].includes(order.orderStatus)) {
+    if (["cancelled", "completed"].includes(order.orderStatus)) {
       return res.status(409).send({
         success: false,
         message: `A ${order.orderStatus} order cannot be cancelled`,
@@ -449,11 +449,19 @@ route.patch("/:orderID/payment", [auth, admin], async (req, res) => {
 
 route.patch("/", [auth, admin], async (req, res) => {
   const { orderID, orderStatus } = req.body;
+  const allowedStatuses = ["pending", "completed", "cancelled"];
 
   if (!orderID || !orderStatus) {
     return res.status(400).send({
       success: false,
       message: "orderID and orderStatus are required",
+    });
+  }
+
+  if (!allowedStatuses.includes(orderStatus)) {
+    return res.status(400).send({
+      success: false,
+      message: "orderStatus must be pending, completed, or cancelled",
     });
   }
 

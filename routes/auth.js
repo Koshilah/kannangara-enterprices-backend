@@ -16,6 +16,8 @@ const {
 const RefreshToken = require("../models/refreshToken");
 const { auditRequest, getUserRole } = require("../utils/auditLogger");
 
+const LOGIN_AUDIT_ROLES = new Set(["cashier", "admin", "manager"]);
+
 const emailValidationSchema = Joi.string().email().min(6).max(50).required();
 const passwordValidationSchema = Joi.string()
   .pattern(new RegExp(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/))
@@ -82,12 +84,15 @@ route.post("/", async (req, res) => {
 
     setRefreshCookie(res, refreshToken);
 
-    auditRequest(req, res, {
-      action: "LOGIN_SUCCEEDED",
-      targetResource: "Authentication",
-      userId: user._id,
-      userRole: getUserRole(user),
-    });
+    const userRole = getUserRole(user);
+    if (LOGIN_AUDIT_ROLES.has(userRole)) {
+      auditRequest(req, res, {
+        action: "LOGIN_SUCCEEDED",
+        targetResource: "Authentication",
+        userId: user._id,
+        userRole,
+      });
+    }
 
     res.header("x-auth-token", accessToken).send(accessToken);
   } catch (error) {
@@ -230,6 +235,9 @@ route.post("/logout", async (req, res) => {
         await doc.save();
       }
     }
+    // Clear both the current cookie path and the path used by older
+    // deployments, so stale sessions cannot be refreshed after logout.
+    res.clearCookie("refresh_token", { path: "/api/auth" });
     res.clearCookie("refresh_token", { path: "/api/auth/refresh" });
     res.json({ success: true, message: "Logged out" });
   } catch (error) {

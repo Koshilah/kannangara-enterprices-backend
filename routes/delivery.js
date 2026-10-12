@@ -59,7 +59,7 @@ route.patch("/status", [auth, admin], async (req, res) => {
         const order = await Order.findById(delivery.orderID).session(session);
 
         if (order) {
-          order.orderStatus = "delivered";
+          order.orderStatus = "completed";
 
           if (order.paymentMethod?.toLowerCase().includes("cash")) {
             order.paymentStatus = "paid";

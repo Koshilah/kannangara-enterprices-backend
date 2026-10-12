@@ -55,7 +55,8 @@ function setRefreshCookie(res, refreshToken) {
     httpOnly: true,
     secure: isProd,
     sameSite: isProd ? "none" : "lax",
-    path: "/api/auth/refresh",
+    // The logout endpoint must receive this cookie so it can revoke it.
+    path: "/api/auth",
     maxAge: REFRESH_TTL_SEC * 1000,
   });
 }

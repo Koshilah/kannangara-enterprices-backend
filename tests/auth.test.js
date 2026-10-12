@@ -7,6 +7,7 @@ const app = require("../app");
 const connectDatabase = require("../startup/db");
 const { User } = require("../models/user");
 const RefreshToken = require("../models/refreshToken");
+const AuditLog = require("../models/auditLog");
 const { generateTokenHash } = require("../utils/tokens");
 
 const validPassword = "Password1!";
@@ -29,6 +30,13 @@ async function loginUser(user = {}) {
   return request(app).post("/api/auth").send(credentials);
 }
 
+async function waitForAuditCount(query, count) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if ((await AuditLog.countDocuments(query)) === count) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 describe("auth routes", () => {
   beforeAll(async () => {
     await connectDatabase(mongodbTestUri, {
@@ -37,7 +45,11 @@ describe("auth routes", () => {
   }, 10000);
 
   beforeEach(async () => {
-    await Promise.all([User.deleteMany({}), RefreshToken.deleteMany({})]);
+    await Promise.all([
+      User.deleteMany({}),
+      RefreshToken.deleteMany({}),
+      AuditLog.deleteMany({}),
+    ]);
   });
 
   afterAll(async () => {
@@ -85,7 +97,36 @@ describe("auth routes", () => {
       expect(response.headers["x-auth-token"]).toBeTruthy();
       expect(response.text).toBe(response.headers["x-auth-token"]);
       expect(response.headers["set-cookie"][0]).toContain("refresh_token=");
+      expect(response.headers["set-cookie"][0]).toContain("Path=/api/auth");
       expect(await RefreshToken.countDocuments({ user: user._id })).toBe(1);
+    });
+
+    test("audits successful logins only for cashiers, admins, and managers", async () => {
+      const users = await Promise.all([
+        createUser({ email: "cashier-login@example.com", isCashier: true }),
+        createUser({ email: "admin-login@example.com", isAdmin: true }),
+        createUser({
+          email: "manager-login@example.com",
+          isMannager: true,
+        }),
+        createUser({ email: "user-login@example.com" }),
+      ]);
+
+      for (const user of users) {
+        const response = await loginUser(user);
+        expect(response.status).toBe(200);
+      }
+
+      await waitForAuditCount({ action: "LOGIN_SUCCEEDED" }, 3);
+      expect(await AuditLog.countDocuments({ action: "LOGIN_SUCCEEDED" })).toBe(
+        3,
+      );
+      expect(
+        await AuditLog.countDocuments({
+          action: "LOGIN_SUCCEEDED",
+          userId: users[3]._id,
+        }),
+      ).toBe(0);
     });
   });
 
