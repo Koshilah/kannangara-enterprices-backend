@@ -58,7 +58,7 @@ async function createOrder(user, overrides = {}) {
     orderTotal: 100,
     paymentMethod: "Cash on Delivery",
     paymentStatus: "pending",
-    orderStatus: "processing",
+    orderStatus: "pending",
     orderType: "delivery",
     deliveryAddress: "1 Test Road",
     estimatedDeliveryDate: new Date(Date.now() + 86400000),
@@ -314,13 +314,13 @@ describe("order routes", () => {
 
   test("rejects cancellation of delivered or already cancelled orders", async () => {
     const deliveredOrder = await createOrder(user, {
-      orderStatus: "delivered",
+      orderStatus: "completed",
     });
     const deliveredResponse = await request(app)
       .patch(`/api/order/${deliveredOrder._id}/cancel`)
       .set("Authorization", userAuthorization);
     expect(deliveredResponse.status).toBe(409);
-    expect(deliveredResponse.body.message).toContain("delivered");
+    expect(deliveredResponse.body.message).toContain("completed");
 
     const cancelledOrder = await createOrder(user, {
       orderStatus: "cancelled",
@@ -346,9 +346,9 @@ describe("order routes", () => {
     const statusResponse = await request(app)
       .patch("/api/order")
       .set("Authorization", adminAuthorization)
-      .send({ orderID: order._id, orderStatus: "shipped" });
+      .send({ orderID: order._id, orderStatus: "completed" });
     expect(statusResponse.status).toBe(200);
-    expect(statusResponse.body.data.orderStatus).toBe("shipped");
+    expect(statusResponse.body.data.orderStatus).toBe("completed");
   });
 
   test("rejects invalid order IDs and payment/status values", async () => {

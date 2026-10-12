@@ -42,7 +42,7 @@ async function createOrder(user) {
     orderTotal: 100,
     paymentMethod: "Cash on Delivery",
     paymentStatus: "pending",
-    orderStatus: "processing",
+    orderStatus: "pending",
     deliveryAddress: "1 Delivery Road",
     estimatedDeliveryDate: new Date(Date.now() + 86400000),
   });
@@ -148,7 +148,7 @@ describe("delivery routes", () => {
 
     expect(response.status).toBe(200);
     const savedOrder = await Order.findById(order._id);
-    expect(savedOrder.orderStatus).toBe("delivered");
+    expect(savedOrder.orderStatus).toBe("completed");
     expect(savedOrder.paymentStatus).toBe("paid");
     expect(savedOrder.paidAt).toEqual(expect.any(Date));
   });
