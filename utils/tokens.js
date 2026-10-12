@@ -54,7 +54,7 @@ function setRefreshCookie(res, refreshToken) {
   res.cookie("refresh_token", refreshToken, {
     httpOnly: true,
     secure: isProd,
-    sameSite: "strict",
+    sameSite: isProd ? "none" : "lax",
     path: "/api/auth/refresh",
     maxAge: REFRESH_TTL_SEC * 1000,
   });

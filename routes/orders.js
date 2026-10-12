@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const route = express.Router();
 const auth = require("../middleware/auth");
 const admin = require("../middleware/admin");
+const management = require("../middleware/management");
 const Cart = require("../models/cart");
 const Order = require("../models/order");
 const { Delivery } = require("../models/delivery");
@@ -264,7 +265,7 @@ route.get("/my-orders", auth, async (req, res) => {
   }
 });
 
-route.get("/", [auth, admin], async (req, res) => {
+route.get("/", [auth, management], async (req, res) => {
   try {
     const orders = await Order.find()
       .populate("userID", "name email")
@@ -279,7 +280,7 @@ route.get("/", [auth, admin], async (req, res) => {
   }
 });
 
-route.get("/:orderID", [auth, admin], async (req, res) => {
+route.get("/:orderID", [auth, management], async (req, res) => {
   const { orderID } = req.params;
 
   if (!isValidObjectId(orderID)) {
