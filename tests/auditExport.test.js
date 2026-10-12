@@ -60,12 +60,14 @@ function expectPdfText(pdfText, expected) {
 describe("audit log export", () => {
   let manager;
   let cashier;
+  const nativeFetch = global.fetch;
 
   beforeAll(async () => {
     await connectDatabase(mongodbTestUri, { serverSelectionTimeoutMS: 3000 });
   }, 10000);
 
   beforeEach(async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error("logo unavailable"));
     await Promise.all([AuditLog.deleteMany({}), User.deleteMany({})]);
     manager = await createUser({
       name: "Report Manager",
@@ -77,6 +79,7 @@ describe("audit log export", () => {
   });
 
   afterAll(async () => {
+    global.fetch = nativeFetch;
     if (mongoose.connection.readyState === 1)
       await mongoose.connection.dropDatabase();
     await mongoose.disconnect();
@@ -180,6 +183,10 @@ describe("audit log export", () => {
       /^attachment; filename="employee-actions-\d{4}-\d{2}-\d{2}\.pdf"$/,
     );
     expect(response.body.subarray(0, 4).toString()).toBe("%PDF");
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://kannangara-enterprices-6483.onrender.com/logo.png",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     const pdfText = response.body.toString("latin1");
     expectPdfText(pdfText, "Kannangara Enterprises");
     expectPdfText(pdfText, "Report Cashier");

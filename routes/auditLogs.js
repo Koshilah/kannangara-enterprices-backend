@@ -62,6 +62,42 @@ const COMPANY_ADDRESS = "Nonagama Road, Kuttigala, Ambilipitiya";
 const COMPANY_CONTACT =
   "Tel: 0472262591 / 0705806000 | Email: kannangaraenterprises@gmail.com";
 const LOGO_PATH = path.resolve(__dirname, "../../frontend/public/logo.png");
+const DEFAULT_LOGO_URL =
+  "https://kannangara-enterprices-6483.onrender.com/logo.png";
+const LOGO_FETCH_TIMEOUT_MS = 2500;
+let logoCache;
+
+async function loadLogo() {
+  const logoUrl = process.env.AUDIT_REPORT_LOGO_URL || DEFAULT_LOGO_URL;
+  if (logoCache?.url === logoUrl) return logoCache.promise;
+
+  const promise = (async () => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(),
+        LOGO_FETCH_TIMEOUT_MS,
+      );
+      try {
+        const response = await fetch(logoUrl, { signal: controller.signal });
+        if (response.ok) return Buffer.from(await response.arrayBuffer());
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch (_error) {
+      // Fall back to the local asset when the deployed asset is unavailable.
+    }
+
+    try {
+      return await fs.promises.readFile(LOGO_PATH);
+    } catch (_error) {
+      return null;
+    }
+  })();
+
+  logoCache = { url: logoUrl, promise };
+  return promise;
+}
 
 function displayDate(value) {
   if (!value) return "-";
@@ -93,14 +129,20 @@ function isFailedAction(log) {
   return Number(log.statusCode) >= 400 || /_FAILED$/.test(log.action || "");
 }
 
-function drawPdfHeader(document, generatedBy, employeeLabel, range) {
+function drawPdfHeader(
+  document,
+  generatedBy,
+  employeeLabel,
+  range,
+  logoBuffer,
+) {
   const left = 36;
   const right = 559;
   const logoSize = 48;
-  const hasLogo = fs.existsSync(LOGO_PATH);
+  const hasLogo = Boolean(logoBuffer);
 
   if (hasLogo)
-    document.image(LOGO_PATH, left, 34, { fit: [logoSize, logoSize] });
+    document.image(logoBuffer, left, 34, { fit: [logoSize, logoSize] });
 
   const textLeft = hasLogo ? left + logoSize + 12 : left;
   document
@@ -264,6 +306,7 @@ route.get("/export", [auth, mannager], async (req, res) => {
     const manager = await User.findById(req.user?._id || req.user?.id)
       .select("name email")
       .lean();
+    const logoBuffer = await loadLogo();
     const generatedBy =
       userLabel(manager) === "Unknown employee"
         ? req.user?.email || req.user?.name || "Manager"
@@ -289,7 +332,13 @@ route.get("/export", [auth, mannager], async (req, res) => {
       compress: false,
     });
     document.pipe(res);
-    drawPdfHeader(document, generatedBy, employeeLabel, filters.range);
+    drawPdfHeader(
+      document,
+      generatedBy,
+      employeeLabel,
+      filters.range,
+      logoBuffer,
+    );
 
     const cardY = 143;
     const cardWidth = 124;
