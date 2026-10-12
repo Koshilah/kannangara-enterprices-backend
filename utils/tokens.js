@@ -55,8 +55,9 @@ function setRefreshCookie(res, refreshToken) {
     httpOnly: true,
     secure: isProd,
     sameSite: isProd ? "none" : "lax",
-    // The logout endpoint must receive this cookie so it can revoke it.
-    path: "/api/auth",
+    // Use one scope for login, refresh, and logout. This also avoids
+    // duplicate refresh_token cookies left by older deployments.
+    path: "/",
     maxAge: REFRESH_TTL_SEC * 1000,
   });
 }

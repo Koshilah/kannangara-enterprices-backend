@@ -23,6 +23,18 @@ const passwordValidationSchema = Joi.string()
   .pattern(new RegExp(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/))
   .required();
 
+function clearRefreshCookies(res) {
+  ["/", "/api/auth", "/api/auth/refresh"].forEach((path) => {
+    res.clearCookie("refresh_token", { path });
+  });
+}
+
+function clearLegacyRefreshCookies(res) {
+  ["/api/auth", "/api/auth/refresh"].forEach((path) => {
+    res.clearCookie("refresh_token", { path });
+  });
+}
+
 function sendLoginFailure(
   req,
   res,
@@ -83,6 +95,10 @@ route.post("/", async (req, res) => {
     });
 
     setRefreshCookie(res, refreshToken);
+    // Remove cookies created by previous versions after setting the current
+    // cookie, so clients that select the first Set-Cookie value use the valid
+    // token.
+    clearLegacyRefreshCookies(res);
 
     const userRole = getUserRole(user);
     if (LOGIN_AUDIT_ROLES.has(userRole)) {
@@ -235,10 +251,7 @@ route.post("/logout", async (req, res) => {
         await doc.save();
       }
     }
-    // Clear both the current cookie path and the path used by older
-    // deployments, so stale sessions cannot be refreshed after logout.
-    res.clearCookie("refresh_token", { path: "/api/auth" });
-    res.clearCookie("refresh_token", { path: "/api/auth/refresh" });
+    clearRefreshCookies(res);
     res.json({ success: true, message: "Logged out" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error" + error });

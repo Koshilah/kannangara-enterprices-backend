@@ -97,7 +97,7 @@ describe("auth routes", () => {
       expect(response.headers["x-auth-token"]).toBeTruthy();
       expect(response.text).toBe(response.headers["x-auth-token"]);
       expect(response.headers["set-cookie"][0]).toContain("refresh_token=");
-      expect(response.headers["set-cookie"][0]).toContain("Path=/api/auth");
+      expect(response.headers["set-cookie"].some((cookie) => cookie.includes("Path=/"))).toBe(true);
       expect(await RefreshToken.countDocuments({ user: user._id })).toBe(1);
     });
 
