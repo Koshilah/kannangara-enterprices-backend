@@ -235,6 +235,9 @@ route.post("/logout", async (req, res) => {
         await doc.save();
       }
     }
+    // Clear both the current cookie path and the path used by older
+    // deployments, so stale sessions cannot be refreshed after logout.
+    res.clearCookie("refresh_token", { path: "/api/auth" });
     res.clearCookie("refresh_token", { path: "/api/auth/refresh" });
     res.json({ success: true, message: "Logged out" });
   } catch (error) {
